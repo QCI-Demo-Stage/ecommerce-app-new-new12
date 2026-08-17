@@ -6,8 +6,9 @@ vendor/
 .env
 .env.local
 
-# Build / IDE
+# Build / IDE / coverage
 dist/
 build/
+coverage/
 .idea/
 *.log
