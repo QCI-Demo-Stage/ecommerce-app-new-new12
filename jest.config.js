@@ -21,6 +21,7 @@ module.exports = {
       statements: 80,
     },
   },
-  reporters: ['default'],
+  // default console reporter + GitHub Actions annotations (check-run friendly)
+  reporters: process.env.GITHUB_ACTIONS === 'true' ? ['default', 'github-actions'] : ['default'],
   clearMocks: true,
 };
