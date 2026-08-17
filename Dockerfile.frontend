@@ -1,0 +1,59 @@
+# Multi-arch frontend image (linux/amd64, linux/arm64 via buildx)
+# Vite React SPA build + lightweight static server
+# Build: docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile.frontend -t ecommerce-frontend .
+
+ARG NODE_VERSION=20
+ARG ALPINE_VERSION=3.20
+
+# ---- Dependencies ----
+FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS deps
+WORKDIR /app
+
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci || npm install
+
+# ---- Build (Vite) ----
+FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS build
+WORKDIR /app
+
+ARG BUILD_VERSION=dev
+ARG BUILD_SHA=unknown
+ARG VITE_API_BASE_URL=/api
+
+ENV BUILD_VERSION=${BUILD_VERSION} \
+    BUILD_SHA=${BUILD_SHA} \
+    VITE_API_BASE_URL=${VITE_API_BASE_URL}
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY frontend/package.json frontend/package-lock.json* ./
+COPY frontend/tsconfig.json frontend/tsconfig.node.json frontend/vite.config.ts frontend/index.html ./
+COPY frontend/src ./src
+COPY frontend/public ./public
+
+RUN npm run build
+
+# ---- Runtime ----
+FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS runtime
+WORKDIR /app
+
+ARG BUILD_VERSION=dev
+ARG BUILD_SHA=unknown
+ARG PORT=3000
+
+ENV NODE_ENV=production \
+    PORT=${PORT} \
+    BUILD_VERSION=${BUILD_VERSION} \
+    BUILD_SHA=${BUILD_SHA}
+
+RUN addgroup -S app && adduser -S app -G app \
+  && npm install -g serve@14
+
+COPY --from=build /app/dist ./dist
+
+USER app
+EXPOSE ${PORT}
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget -qO- "http://127.0.0.1:${PORT}/" || exit 1
+
+CMD ["sh", "-c", "serve -s dist -l ${PORT}"]

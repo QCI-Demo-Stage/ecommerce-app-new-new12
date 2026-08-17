@@ -1,0 +1,13 @@
+.git
+.github
+.gitignore
+*.md
+node_modules
+**/node_modules
+**/dist
+**/coverage
+**/.env*
+chart
+docs
+*.log
+.DS_Store
