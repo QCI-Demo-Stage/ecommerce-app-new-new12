@@ -1,0 +1,16 @@
+node_modules
+npm-debug.log*
+.git
+.github
+.cursor
+chart
+dist
+build
+coverage
+*.md
+.env
+.env.*
+**/.DS_Store
+**/tmp
+artifacts
+scripts

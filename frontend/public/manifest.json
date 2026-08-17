@@ -1,0 +1,6 @@
+{
+  "name": "Ecommerce App New",
+  "short_name": "Ecommerce",
+  "start_url": "/",
+  "display": "standalone"
+}

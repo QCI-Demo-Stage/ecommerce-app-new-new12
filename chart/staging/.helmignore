@@ -1,0 +1,7 @@
+# Patterns to ignore when packaging the chart
+.DS_Store
+*.tgz
+*.md
+.git/
+.gitignore
+.values-local.yaml
