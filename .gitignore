@@ -11,3 +11,5 @@ dist/
 build/
 .idea/
 *.log
+artifacts/
+*.tsbuildinfo
