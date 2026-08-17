@@ -1,0 +1,13 @@
+apiVersion: v2
+name: ecommerce-staging
+description: Helm chart for Ecommerce App New staging deployment (frontend + backend)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - ecommerce
+  - staging
+  - react
+  - node
+maintainers:
+  - name: Ecommerce Platform Team

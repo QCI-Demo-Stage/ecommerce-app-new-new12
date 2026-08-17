@@ -1,0 +1,9 @@
+# Ecommerce staging chart
+#
+# Preview (read-only):
+#   helm lint ./chart/staging -f ./chart/staging/values-staging.yaml
+#   helm template ecommerce-staging ./chart/staging -f ./chart/staging/values-staging.yaml
+#   helm install ecommerce-staging ./chart/staging -f ./chart/staging/values-staging.yaml --dry-run=client --debug
+#   kubectl apply --dry-run=client -f <(helm template ecommerce-staging ./chart/staging -f ./chart/staging/values-staging.yaml)
+#
+# Apply / helm upgrade without --dry-run is withheld for human approval.
