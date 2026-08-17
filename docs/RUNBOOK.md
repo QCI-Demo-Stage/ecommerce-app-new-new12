@@ -116,7 +116,7 @@ flowchart LR
   A[workflow_dispatch / git tag] --> B[Retrieve image tags from ECR]
   B --> C[production environment approval]
   C --> D[Helm lint + template dry-run]
-  D --> E[Human: helm upgrade --install into prod]
+  D --> E["helm upgrade --install into prod"]
   E --> F[curl /health post-check]
   F --> G[Observe Grafana / alerts]
 ```
@@ -125,11 +125,13 @@ flowchart LR
 
 1. **retrieve-image-tags** — AWS login, resolve tag (input → git tag → ECR `staging` → `latest`).
 2. **helm-upgrade** — runs in GitHub Environment `production` (configure required reviewers).  
-   Performs `helm lint` + `helm template` dry-run against `values-prod.yaml`.  
-   **Live `helm upgrade --install` is withheld** for a human operator after approval.
-3. **post-deploy-health-check** — `curl` to `PROD_HEALTH_URL` (default `https://ecommerce.example.com/health`).
+   Performs `helm lint` + `helm template` dry-run against `values-prod.yaml`, then  
+   `helm upgrade --install` into `prod` using secret `KUBE_CONFIG_PROD` (base64 kubeconfig).
+3. **post-deploy-health-check** — retries `curl` to `PROD_HEALTH_URL` (default `https://ecommerce.example.com/health`).
 
-### Human live apply (after CI dry-run + approval)
+### Manual apply (break-glass / offline)
+
+If Actions cannot reach the cluster, an approved operator may apply locally:
 
 ```bash
 helm upgrade --install ecommerce-prod ./chart/staging \
@@ -140,7 +142,7 @@ helm upgrade --install ecommerce-prod ./chart/staging \
 
 kubectl -n prod get pods
 curl -fsS https://ecommerce.example.com/health
-curl -fsS https://ecommerce.example.com/api/health || curl -fsS https://ecommerce.example.com/ready
+curl -fsS https://ecommerce.example.com/ready
 ```
 
 ---

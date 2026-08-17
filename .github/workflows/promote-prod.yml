@@ -1,14 +1,18 @@
 # One-click (manual / tag-triggered) production promotion.
-# Pulls image tags from ECR (or workflow input), runs Helm dry-run validation,
-# then waits on the `production` GitHub Environment for human approval before
-# a human executes the live `helm upgrade --install` (mutating apply withheld here).
+# Pulls image tags from ECR (or workflow input), validates with Helm dry-run,
+# waits on the `production` GitHub Environment for human approval, then runs
+# `helm upgrade --install` into the prod namespace and curls /health.
 #
 # Required repository secrets:
 #   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+#   KUBE_CONFIG_PROD (base64-encoded kubeconfig for the production cluster)
 # Optional:
 #   AWS_REGION, AWS_ACCOUNT_ID, PROD_HEALTH_URL
 # Environment protection:
 #   Configure the `production` environment with required reviewers in GitHub Settings.
+#
+# One-command trigger (from a developer workstation, not this CI authoring agent):
+#   gh workflow run promote-prod.yml -f version_tag=<tag> -f confirm_promote=promote
 
 name: Promote to Production
 
@@ -16,7 +20,7 @@ on:
   workflow_dispatch:
     inputs:
       version_tag:
-        description: "Optional image tag to promote (defaults to latest staging tag / input SHA)"
+        description: "Optional image tag to promote (defaults to latest staging tag / git tag)"
         required: false
         type: string
       confirm_promote:
@@ -101,7 +105,7 @@ jobs:
           if [ -n "${INPUT_TAG}" ]; then
             IMAGE_TAG="${INPUT_TAG}"
           else
-            # Prefer the 'staging' tag digest-linked image; fall back to 'latest'.
+            # Prefer the 'staging' tag; fall back to 'latest'.
             IMAGE_TAG="$(aws ecr describe-images \
               --repository-name ecommerce-backend \
               --region "${REGION}" \
@@ -123,7 +127,7 @@ jobs:
           } >> "${GITHUB_STEP_SUMMARY}"
 
   helm-upgrade:
-    name: Helm upgrade (dry-run) + approval gate
+    name: Helm upgrade --install (prod)
     needs: retrieve-image-tags
     runs-on: ubuntu-latest
     environment: production
@@ -146,7 +150,7 @@ jobs:
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Helm lint + dry-run (live apply withheld)
+      - name: Helm lint + template dry-run
         run: |
           set -euo pipefail
           IMAGE_TAG="${{ needs.retrieve-image-tags.outputs.image_tag }}"
@@ -155,11 +159,6 @@ jobs:
 
           helm lint "${{ env.HELM_CHART }}"
 
-          # Offline dry-run equivalent of:
-          #   helm upgrade --install ecommerce-prod ./chart/staging \
-          #     --namespace prod -f values-prod.yaml --set ...
-          # Live mutating helm apply is withheld pending a human with cluster access
-          # after the production environment protection rules approve this job.
           helm template "${{ env.RELEASE_NAME }}" "${{ env.HELM_CHART }}" \
             --namespace "${{ env.PROD_NAMESPACE }}" \
             --values "${{ env.HELM_CHART }}/values-prod.yaml" \
@@ -171,11 +170,43 @@ jobs:
 
           echo "Production Helm dry-run succeeded for tag ${IMAGE_TAG}"
           grep -E 'livenessProbe|readinessProbe|path: /(health|ready)' /tmp/prod-dry-run.yaml | head -40
-          wc -l /tmp/prod-dry-run.yaml
           {
             echo "## Helm dry-run"
             echo "Rendered manifests for \`${{ env.RELEASE_NAME }}\` in \`${{ env.PROD_NAMESPACE }}\`."
-            echo "Mutating \`helm upgrade --install\` is withheld for a human operator."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Configure kubeconfig for production
+        run: |
+          set -euo pipefail
+          if [ -z "${{ secrets.KUBE_CONFIG_PROD }}" ]; then
+            echo "KUBE_CONFIG_PROD secret is required for helm upgrade --install"
+            exit 1
+          fi
+          mkdir -p "${HOME}/.kube"
+          echo "${{ secrets.KUBE_CONFIG_PROD }}" | base64 -d > "${HOME}/.kube/config"
+          chmod 600 "${HOME}/.kube/config"
+
+      - name: Helm upgrade --install into prod
+        run: |
+          set -euo pipefail
+          IMAGE_TAG="${{ needs.retrieve-image-tags.outputs.image_tag }}"
+          BACKEND_REPO="${{ needs.retrieve-image-tags.outputs.account_id }}.dkr.ecr.${{ needs.retrieve-image-tags.outputs.region }}.amazonaws.com/ecommerce-backend"
+          FRONTEND_REPO="${{ needs.retrieve-image-tags.outputs.account_id }}.dkr.ecr.${{ needs.retrieve-image-tags.outputs.region }}.amazonaws.com/ecommerce-frontend"
+
+          helm upgrade --install "${{ env.RELEASE_NAME }}" "${{ env.HELM_CHART }}" \
+            --namespace "${{ env.PROD_NAMESPACE }}" \
+            --create-namespace \
+            --values "${{ env.HELM_CHART }}/values-prod.yaml" \
+            --set backend.image.repository="${BACKEND_REPO}" \
+            --set backend.image.tag="${IMAGE_TAG}" \
+            --set frontend.image.repository="${FRONTEND_REPO}" \
+            --set frontend.image.tag="${IMAGE_TAG}" \
+            --wait \
+            --timeout 10m
+
+          {
+            echo "## Helm upgrade"
+            echo "Applied \`${{ env.RELEASE_NAME }}\` with image tag \`${IMAGE_TAG}\`."
           } >> "${GITHUB_STEP_SUMMARY}"
 
   post-deploy-health-check:
@@ -193,19 +224,20 @@ jobs:
           fi
 
           echo "Checking ${HEALTH_URL}"
-          # Soft check: when the production cluster is not yet reachable from CI,
-          # record the intended probe and exit 0 so the workflow remains usable
-          # as a one-click promotion plan. Operators must verify live /health
-          # after applying the withheld helm upgrade.
-          if curl -fsS --max-time 15 "${HEALTH_URL}" -o /tmp/health.json; then
-            echo "Health check OK:"
-            cat /tmp/health.json
-            echo "health_status=ok" >> "${GITHUB_STEP_SUMMARY}"
-          else
-            echo "Health endpoint not reachable yet (expected before live apply)."
-            echo "After human helm apply, re-run or curl ${HEALTH_URL} manually."
-            {
-              echo "## Health check"
-              echo "Endpoint \`${HEALTH_URL}\` not reachable from CI — expected until live apply."
-            } >> "${GITHUB_STEP_SUMMARY}"
-          fi
+          # Retry briefly while ingress / pods settle after helm --wait.
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS --max-time 15 "${HEALTH_URL}" -o /tmp/health.json; then
+              echo "Health check OK:"
+              cat /tmp/health.json
+              {
+                echo "## Health check"
+                echo "Endpoint \`${HEALTH_URL}\` returned success."
+              } >> "${GITHUB_STEP_SUMMARY}"
+              exit 0
+            fi
+            echo "Attempt ${i}/6 failed; sleeping 10s..."
+            sleep 10
+          done
+
+          echo "Health check failed after retries for ${HEALTH_URL}"
+          exit 1

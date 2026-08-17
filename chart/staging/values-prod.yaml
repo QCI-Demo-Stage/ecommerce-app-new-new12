@@ -1,5 +1,6 @@
 # Production overrides for Ecommerce App New.
-# Usage (human-approved apply withheld in CI — dry-run / template only):
+# Applied by .github/workflows/promote-prod.yml after the `production`
+# environment approval gate (or manually by an approved operator):
 #   helm upgrade --install ecommerce-prod ./chart/staging \
 #     --namespace prod \
 #     -f ./chart/staging/values-prod.yaml \
