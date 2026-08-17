@@ -1,0 +1,102 @@
+# SLO definitions for Ecommerce App New (Prometheus / multi-window burn).
+# Availability target: 99.9% successful HTTP responses over 30 days.
+# Latency target: 99% of requests complete in under 500ms over 30 days.
+#
+# These are declarative SLO objects consumed by dashboards and recording rules.
+# They are not applied live by CI (mutating apply withheld for humans).
+
+apiVersion: sloth.slok.dev/v1
+kind: PrometheusServiceLevel
+metadata:
+  name: ecommerce-services
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: ecommerce-app-new
+spec:
+  service: ecommerce
+  labels:
+    owner: platform
+  slos:
+    - name: backend-availability
+      objective: 99.9
+      description: "Backend HTTP success ratio (non-5xx) over rolling window"
+      sli:
+        events:
+          errorQuery: |
+            sum(rate(http_request_errors_total{service="backend",status_code=~"5.."}[{{.window}}]))
+          totalQuery: |
+            sum(rate(http_requests_total{service="backend"}[{{.window}}]))
+      alerting:
+        name: BackendAvailability
+        labels:
+          category: availability
+        pageAlert:
+          labels:
+            severity: critical
+        ticketAlert:
+          labels:
+            severity: warning
+
+    - name: frontend-availability
+      objective: 99.9
+      description: "Frontend HTTP success ratio over rolling window"
+      sli:
+        events:
+          errorQuery: |
+            sum(rate(http_request_errors_total{service="frontend",status_code=~"5.."}[{{.window}}]))
+          totalQuery: |
+            sum(rate(http_requests_total{service="frontend"}[{{.window}}]))
+      alerting:
+        name: FrontendAvailability
+        labels:
+          category: availability
+        pageAlert:
+          labels:
+            severity: critical
+        ticketAlert:
+          labels:
+            severity: warning
+
+    - name: backend-latency
+      objective: 99
+      description: "99% of backend requests faster than 500ms"
+      sli:
+        events:
+          errorQuery: |
+            sum(rate(http_request_duration_seconds_count{service="backend"}[{{.window}}]))
+            -
+            sum(rate(http_request_duration_seconds_bucket{service="backend",le="0.5"}[{{.window}}]))
+          totalQuery: |
+            sum(rate(http_request_duration_seconds_count{service="backend"}[{{.window}}]))
+      alerting:
+        name: BackendLatency
+        labels:
+          category: latency
+        pageAlert:
+          labels:
+            severity: critical
+        ticketAlert:
+          labels:
+            severity: warning
+
+    - name: frontend-latency
+      objective: 99
+      description: "99% of frontend requests faster than 500ms"
+      sli:
+        events:
+          errorQuery: |
+            sum(rate(http_request_duration_seconds_count{service="frontend"}[{{.window}}]))
+            -
+            sum(rate(http_request_duration_seconds_bucket{service="frontend",le="0.5"}[{{.window}}]))
+          totalQuery: |
+            sum(rate(http_request_duration_seconds_count{service="frontend"}[{{.window}}]))
+      alerting:
+        name: FrontendLatency
+        labels:
+          category: latency
+        pageAlert:
+          labels:
+            severity: critical
+        ticketAlert:
+          labels:
+            severity: warning

@@ -1,0 +1,243 @@
+# One-click (manual / tag-triggered) production promotion.
+# Pulls image tags from ECR (or workflow input), validates with Helm dry-run,
+# waits on the `production` GitHub Environment for human approval, then runs
+# `helm upgrade --install` into the prod namespace and curls /health.
+#
+# Required repository secrets:
+#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+#   KUBE_CONFIG_PROD (base64-encoded kubeconfig for the production cluster)
+# Optional:
+#   AWS_REGION, AWS_ACCOUNT_ID, PROD_HEALTH_URL
+# Environment protection:
+#   Configure the `production` environment with required reviewers in GitHub Settings.
+#
+# One-command trigger (from a developer workstation, not this CI authoring agent):
+#   gh workflow run promote-prod.yml -f version_tag=<tag> -f confirm_promote=promote
+
+name: Promote to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: "Optional image tag to promote (defaults to latest staging tag / git tag)"
+        required: false
+        type: string
+      confirm_promote:
+        description: "Type 'promote' to confirm intent (live apply still requires environment approval)"
+        required: true
+        type: string
+  push:
+    tags:
+      - "v*"
+      - "prod-*"
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ACCOUNT_ID: "123456789012"
+  HELM_CHART: ./chart/staging
+  PROD_NAMESPACE: prod
+  RELEASE_NAME: ecommerce-prod
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  retrieve-image-tags:
+    name: Retrieve image tags from ECR
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.resolve.outputs.image_tag }}
+      backend_image: ${{ steps.resolve.outputs.backend_image }}
+      frontend_image: ${{ steps.resolve.outputs.frontend_image }}
+      region: ${{ steps.aws-config.outputs.region }}
+      account_id: ${{ steps.aws-config.outputs.account_id }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Guard workflow_dispatch confirmation
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.confirm_promote }}" != "promote" ]; then
+            echo "Refusing promotion: confirm_promote must equal 'promote'"
+            exit 1
+          fi
+
+      - name: Resolve AWS configuration
+        id: aws-config
+        run: |
+          set -euo pipefail
+          REGION="${{ secrets.AWS_REGION }}"
+          ACCOUNT_ID="${{ secrets.AWS_ACCOUNT_ID }}"
+          if [ -z "${REGION}" ]; then REGION="${{ env.AWS_REGION }}"; fi
+          if [ -z "${ACCOUNT_ID}" ]; then ACCOUNT_ID="${{ env.AWS_ACCOUNT_ID }}"; fi
+          echo "region=${REGION}" >> "${GITHUB_OUTPUT}"
+          echo "account_id=${ACCOUNT_ID}" >> "${GITHUB_OUTPUT}"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ steps.aws-config.outputs.region }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Resolve image tag
+        id: resolve
+        run: |
+          set -euo pipefail
+          REGION="${{ steps.aws-config.outputs.region }}"
+          ACCOUNT_ID="${{ steps.aws-config.outputs.account_id }}"
+          REGISTRY="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
+          BACKEND_REPO="${REGISTRY}/ecommerce-backend"
+          FRONTEND_REPO="${REGISTRY}/ecommerce-frontend"
+
+          INPUT_TAG="${{ github.event.inputs.version_tag }}"
+          if [ -z "${INPUT_TAG}" ] && [ "${{ github.ref_type }}" = "tag" ]; then
+            INPUT_TAG="${{ github.ref_name }}"
+          fi
+
+          if [ -n "${INPUT_TAG}" ]; then
+            IMAGE_TAG="${INPUT_TAG}"
+          else
+            # Prefer the 'staging' tag; fall back to 'latest'.
+            IMAGE_TAG="$(aws ecr describe-images \
+              --repository-name ecommerce-backend \
+              --region "${REGION}" \
+              --image-ids imageTag=staging \
+              --query 'imageDetails[0].imageTags[0]' \
+              --output text 2>/dev/null || true)"
+            if [ -z "${IMAGE_TAG}" ] || [ "${IMAGE_TAG}" = "None" ]; then
+              IMAGE_TAG="latest"
+            fi
+          fi
+
+          echo "image_tag=${IMAGE_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "backend_image=${BACKEND_REPO}:${IMAGE_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "frontend_image=${FRONTEND_REPO}:${IMAGE_TAG}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "## Images to promote"
+            echo "- Backend: \`${BACKEND_REPO}:${IMAGE_TAG}\`"
+            echo "- Frontend: \`${FRONTEND_REPO}:${IMAGE_TAG}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  helm-upgrade:
+    name: Helm upgrade --install (prod)
+    needs: retrieve-image-tags
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ needs.retrieve-image-tags.outputs.region }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Helm lint + template dry-run
+        run: |
+          set -euo pipefail
+          IMAGE_TAG="${{ needs.retrieve-image-tags.outputs.image_tag }}"
+          BACKEND_REPO="${{ needs.retrieve-image-tags.outputs.account_id }}.dkr.ecr.${{ needs.retrieve-image-tags.outputs.region }}.amazonaws.com/ecommerce-backend"
+          FRONTEND_REPO="${{ needs.retrieve-image-tags.outputs.account_id }}.dkr.ecr.${{ needs.retrieve-image-tags.outputs.region }}.amazonaws.com/ecommerce-frontend"
+
+          helm lint "${{ env.HELM_CHART }}"
+
+          helm template "${{ env.RELEASE_NAME }}" "${{ env.HELM_CHART }}" \
+            --namespace "${{ env.PROD_NAMESPACE }}" \
+            --values "${{ env.HELM_CHART }}/values-prod.yaml" \
+            --set backend.image.repository="${BACKEND_REPO}" \
+            --set backend.image.tag="${IMAGE_TAG}" \
+            --set frontend.image.repository="${FRONTEND_REPO}" \
+            --set frontend.image.tag="${IMAGE_TAG}" \
+            > /tmp/prod-dry-run.yaml
+
+          echo "Production Helm dry-run succeeded for tag ${IMAGE_TAG}"
+          grep -E 'livenessProbe|readinessProbe|path: /(health|ready)' /tmp/prod-dry-run.yaml | head -40
+          {
+            echo "## Helm dry-run"
+            echo "Rendered manifests for \`${{ env.RELEASE_NAME }}\` in \`${{ env.PROD_NAMESPACE }}\`."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Configure kubeconfig for production
+        run: |
+          set -euo pipefail
+          if [ -z "${{ secrets.KUBE_CONFIG_PROD }}" ]; then
+            echo "KUBE_CONFIG_PROD secret is required for helm upgrade --install"
+            exit 1
+          fi
+          mkdir -p "${HOME}/.kube"
+          echo "${{ secrets.KUBE_CONFIG_PROD }}" | base64 -d > "${HOME}/.kube/config"
+          chmod 600 "${HOME}/.kube/config"
+
+      - name: Helm upgrade --install into prod
+        run: |
+          set -euo pipefail
+          IMAGE_TAG="${{ needs.retrieve-image-tags.outputs.image_tag }}"
+          BACKEND_REPO="${{ needs.retrieve-image-tags.outputs.account_id }}.dkr.ecr.${{ needs.retrieve-image-tags.outputs.region }}.amazonaws.com/ecommerce-backend"
+          FRONTEND_REPO="${{ needs.retrieve-image-tags.outputs.account_id }}.dkr.ecr.${{ needs.retrieve-image-tags.outputs.region }}.amazonaws.com/ecommerce-frontend"
+
+          helm upgrade --install "${{ env.RELEASE_NAME }}" "${{ env.HELM_CHART }}" \
+            --namespace "${{ env.PROD_NAMESPACE }}" \
+            --create-namespace \
+            --values "${{ env.HELM_CHART }}/values-prod.yaml" \
+            --set backend.image.repository="${BACKEND_REPO}" \
+            --set backend.image.tag="${IMAGE_TAG}" \
+            --set frontend.image.repository="${FRONTEND_REPO}" \
+            --set frontend.image.tag="${IMAGE_TAG}" \
+            --wait \
+            --timeout 10m
+
+          {
+            echo "## Helm upgrade"
+            echo "Applied \`${{ env.RELEASE_NAME }}\` with image tag \`${IMAGE_TAG}\`."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  post-deploy-health-check:
+    name: Post-deployment health check
+    needs: [retrieve-image-tags, helm-upgrade]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Health check via curl /health
+        run: |
+          set -euo pipefail
+          HEALTH_URL="${{ secrets.PROD_HEALTH_URL }}"
+          if [ -z "${HEALTH_URL}" ]; then
+            HEALTH_URL="https://ecommerce.example.com/health"
+          fi
+
+          echo "Checking ${HEALTH_URL}"
+          # Retry briefly while ingress / pods settle after helm --wait.
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS --max-time 15 "${HEALTH_URL}" -o /tmp/health.json; then
+              echo "Health check OK:"
+              cat /tmp/health.json
+              {
+                echo "## Health check"
+                echo "Endpoint \`${HEALTH_URL}\` returned success."
+              } >> "${GITHUB_STEP_SUMMARY}"
+              exit 0
+            fi
+            echo "Attempt ${i}/6 failed; sleeping 10s..."
+            sleep 10
+          done
+
+          echo "Health check failed after retries for ${HEALTH_URL}"
+          exit 1

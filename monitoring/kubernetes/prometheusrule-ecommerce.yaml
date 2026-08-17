@@ -1,0 +1,94 @@
+# PrometheusRule CRDs for Ecommerce App New.
+# Intended namespace: monitoring
+# Mutating apply (`kubectl apply`) is withheld for human approval.
+# Validate rule expressions with: promtool check rules monitoring/prometheus/rules/*.yml
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ecommerce-ci-alerts
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: ecommerce-app-new
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+    - name: ecommerce.ci
+      interval: 30s
+      rules:
+        - alert: CIJobFailure
+          expr: CIJobFailure{job="build"} == 1
+          for: 1m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "CI build job failure detected"
+            description: >-
+              CIJobFailure{job="build"} == 1. Investigate the latest GitHub Actions
+              build and do not promote to production until the failure is resolved.
+            runbook_url: "docs/RUNBOOK.md#alert-handling"
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ecommerce-latency-alerts
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: ecommerce-app-new
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+    - name: ecommerce.latency
+      interval: 30s
+      rules:
+        # Alert name HighLatency; fires when p95 latency exceeds 500ms (0.5s)
+        # for backend or frontend over a 5-minute window.
+        - alert: HighLatency
+          expr: |
+            histogram_quantile(
+              0.95,
+              sum by (le, service) (
+                rate(http_request_duration_seconds_bucket{service=~"backend|frontend"}[5m])
+              )
+            ) > 0.5
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "High request latency on {{ $labels.service }}"
+            description: >-
+              p95 latency for {{ $labels.service }} is above 500ms over 5 minutes
+              (current value {{ $value }}). Check recent deploys and resource usage.
+            runbook_url: "docs/RUNBOOK.md#alert-handling"
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ecommerce-recording-rules
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: ecommerce-app-new
+    prometheus: kube-prometheus
+    role: recording-rules
+spec:
+  groups:
+    - name: ecommerce.recording
+      interval: 30s
+      rules:
+        - record: job:http_request_duration_seconds:p95
+          expr: |
+            histogram_quantile(
+              0.95,
+              sum by (le, service, job) (
+                rate(http_request_duration_seconds_bucket{service=~"backend|frontend"}[5m])
+              )
+            )
+        - record: job:http_request_error_ratio:rate5m
+          expr: |
+            sum by (service, job) (rate(http_request_errors_total{service=~"backend|frontend"}[5m]))
+            /
+            clamp_min(sum by (service, job) (rate(http_requests_total{service=~"backend|frontend"}[5m])), 1e-9)

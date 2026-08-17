@@ -1,0 +1,64 @@
+# Prometheus alert + recording rules for Ecommerce App New.
+# Validate: promtool check rules monitoring/prometheus/rules/*.yml
+groups:
+  - name: ecommerce.ci
+    interval: 30s
+    rules:
+      # Fires when the CI "build" job reports a failure status metric.
+      - alert: CIJobFailure
+        expr: CIJobFailure{job="build"} == 1
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "CI build job failure detected"
+          description: >-
+            The CI job status metric CIJobFailure{job="build"} equals 1,
+            indicating a failed build pipeline run. Investigate the latest
+            GitHub Actions build workflow and block production promotion until resolved.
+          runbook_url: "https://github.com/QCI-Demo-Stage/ecommerce-app-new-new12/blob/main/docs/RUNBOOK.md#alert-handling"
+
+  - name: ecommerce.latency
+    interval: 30s
+    rules:
+      # Request latency (p95) exceeds 500ms over a 5-minute window for backend or frontend.
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, service) (
+              rate(http_request_duration_seconds_bucket{service=~"backend|frontend"}[5m])
+            )
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High request latency on {{ $labels.service }}"
+          description: >-
+            p95 request latency for service {{ $labels.service }} is {{ $value | humanizeDuration }}
+            (threshold 500ms) over the last 5 minutes. Check recent deploys, dependency latency,
+            and pod resource saturation.
+          runbook_url: "https://github.com/QCI-Demo-Stage/ecommerce-app-new-new12/blob/main/docs/RUNBOOK.md#alert-handling"
+
+  - name: ecommerce.availability
+    interval: 30s
+    rules:
+      - alert: ServiceErrorBudgetBurn
+        expr: |
+          (
+            sum by (service) (rate(http_request_errors_total{service=~"backend|frontend"}[5m]))
+            /
+            clamp_min(sum by (service) (rate(http_requests_total{service=~"backend|frontend"}[5m])), 1e-9)
+          ) > 0.01
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Elevated error rate on {{ $labels.service }}"
+          description: >-
+            Error ratio for {{ $labels.service }} exceeded 1% over 10 minutes.
+            See SLO burn dashboard and recent change windows.

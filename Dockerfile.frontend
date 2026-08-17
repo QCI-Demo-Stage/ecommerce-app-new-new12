@@ -1,0 +1,75 @@
+# Multi-arch frontend image for Ecommerce App New (React + Vite)
+# Supports linux/amd64 and linux/arm64 via Docker buildx.
+# Runtime serves the SPA plus Prometheus /metrics and Kubernetes /health|/ready
+# endpoints via a small Express TypeScript server (prom-client).
+# Example:
+#   docker buildx build --platform linux/amd64,linux/arm64 \
+#     -f Dockerfile.frontend \
+#     --build-arg VITE_API_BASE_URL=/api \
+#     --build-arg NODE_ENV=production \
+#     -t ecommerce-frontend:latest --push .
+
+ARG NODE_VERSION=20
+
+# ---- Dependencies ----
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine AS deps
+WORKDIR /app
+
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci || npm install
+
+# ---- Build (Vite React app + metrics server) ----
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine AS build
+WORKDIR /app
+
+ARG NODE_ENV=production
+ARG VITE_API_BASE_URL=/api
+ARG APP_VERSION=0.0.0
+
+ENV NODE_ENV=${NODE_ENV} \
+    VITE_API_BASE_URL=${VITE_API_BASE_URL} \
+    VITE_APP_VERSION=${APP_VERSION}
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY frontend/package.json frontend/package-lock.json* ./
+COPY frontend/tsconfig.json frontend/tsconfig.app.json frontend/tsconfig.node.json frontend/tsconfig.server.json ./
+COPY frontend/vite.config.ts frontend/index.html ./
+COPY frontend/src ./src
+COPY frontend/public ./public
+COPY frontend/server ./server
+
+RUN npm run build
+
+# ---- Runtime deps (production only) ----
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine AS runtime-deps
+WORKDIR /app
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci --omit=dev || npm install --omit=dev
+
+# ---- Runtime ----
+FROM node:${NODE_VERSION}-alpine AS runtime
+WORKDIR /app
+
+ARG NODE_ENV=production
+ARG APP_VERSION=0.0.0
+ARG PORT=8080
+
+ENV NODE_ENV=${NODE_ENV} \
+    APP_VERSION=${APP_VERSION} \
+    PORT=${PORT}
+
+RUN addgroup -S app && adduser -S app -G app \
+  && apk add --no-cache wget
+
+COPY --from=runtime-deps /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/server-dist ./server-dist
+COPY frontend/package.json ./
+
+USER app
+EXPOSE ${PORT}
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget -qO- "http://127.0.0.1:${PORT}/health" || exit 1
+
+CMD ["node", "server-dist/index.js"]

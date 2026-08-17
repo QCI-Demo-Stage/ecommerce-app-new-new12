@@ -1,0 +1,248 @@
+# Multi-arch Docker build & push to simulated AWS ECR, then Helm staging dry-run.
+# Required repository secrets:
+#   AWS_ACCESS_KEY_ID
+#   AWS_SECRET_ACCESS_KEY
+# Optional repository secrets / vars:
+#   AWS_REGION          (default: us-east-1)
+#   AWS_ACCOUNT_ID       (default: 123456789012 — simulated ECR account)
+#   KUBE_CONFIG_STAGING (base64 kubeconfig; required only for live deploy, withheld here)
+
+name: Docker Build and Push
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ACCOUNT_ID: "123456789012"
+  PLATFORMS: linux/amd64,linux/arm64
+
+permissions:
+  contents: read
+  id-token: write
+  actions: write
+
+jobs:
+  build-and-push:
+    name: Build multi-arch images and push to ECR
+    runs-on: ubuntu-latest
+
+    outputs:
+      backend_image: ${{ steps.image-uris.outputs.backend_image }}
+      frontend_image: ${{ steps.image-uris.outputs.frontend_image }}
+      image_tag: ${{ steps.meta.outputs.sha }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Resolve AWS configuration
+        id: aws-config
+        run: |
+          set -euo pipefail
+          REGION="${{ secrets.AWS_REGION }}"
+          ACCOUNT_ID="${{ secrets.AWS_ACCOUNT_ID }}"
+          if [ -z "${REGION}" ]; then REGION="${{ env.AWS_REGION }}"; fi
+          if [ -z "${ACCOUNT_ID}" ]; then ACCOUNT_ID="${{ env.AWS_ACCOUNT_ID }}"; fi
+          echo "region=${REGION}" >> "${GITHUB_OUTPUT}"
+          echo "account_id=${ACCOUNT_ID}" >> "${GITHUB_OUTPUT}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "platforms=linux/amd64" >> "${GITHUB_OUTPUT}"
+            echo "do_push=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "platforms=${{ env.PLATFORMS }}" >> "${GITHUB_OUTPUT}"
+            echo "do_push=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Set image metadata
+        id: meta
+        run: |
+          set -euo pipefail
+          SHA_SHORT="${GITHUB_SHA::12}"
+          echo "sha=${SHA_SHORT}" >> "${GITHUB_OUTPUT}"
+          echo "full_sha=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+          REGISTRY="${{ steps.aws-config.outputs.account_id }}.dkr.ecr.${{ steps.aws-config.outputs.region }}.amazonaws.com"
+          echo "registry=${REGISTRY}" >> "${GITHUB_OUTPUT}"
+          echo "backend_repo=${REGISTRY}/ecommerce-backend" >> "${GITHUB_OUTPUT}"
+          echo "frontend_repo=${REGISTRY}/ecommerce-frontend" >> "${GITHUB_OUTPUT}"
+
+      - name: Configure AWS credentials
+        if: github.event_name != 'pull_request'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ steps.aws-config.outputs.region }}
+
+      - name: Login to Amazon ECR (simulated)
+        if: github.event_name != 'pull_request'
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Ensure ECR repositories exist
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          for REPO in ecommerce-backend ecommerce-frontend; do
+            aws ecr describe-repositories --repository-names "${REPO}" --region "${{ steps.aws-config.outputs.region }}" >/dev/null 2>&1 \
+              || aws ecr create-repository \
+                   --repository-name "${REPO}" \
+                   --region "${{ steps.aws-config.outputs.region }}" \
+                   --image-scanning-configuration scanOnPush=true \
+                   --encryption-configuration encryptionType=AES256
+          done
+
+      - name: Build and push backend (linux/amd64,linux/arm64)
+        run: |
+          set -euo pipefail
+          BACKEND_REPO="${{ steps.meta.outputs.backend_repo }}"
+          TAG="${{ steps.meta.outputs.sha }}"
+          PLATFORMS="${{ steps.aws-config.outputs.platforms }}"
+          EXTRA_FLAGS=(--push)
+          if [ "${{ steps.aws-config.outputs.do_push }}" != "true" ]; then
+            # PRs: single-arch load for validation (no registry push)
+            EXTRA_FLAGS=(--load)
+            PLATFORMS="linux/amd64"
+          fi
+          docker buildx build \
+            --platform "${PLATFORMS}" \
+            --file Dockerfile.backend \
+            --build-arg NODE_ENV=production \
+            --build-arg PORT=3000 \
+            --build-arg APP_VERSION="${TAG}" \
+            --tag "${BACKEND_REPO}:${TAG}" \
+            --tag "${BACKEND_REPO}:staging" \
+            --tag "${BACKEND_REPO}:latest" \
+            "${EXTRA_FLAGS[@]}" \
+            .
+
+      - name: Build and push frontend (linux/amd64,linux/arm64)
+        run: |
+          set -euo pipefail
+          FRONTEND_REPO="${{ steps.meta.outputs.frontend_repo }}"
+          TAG="${{ steps.meta.outputs.sha }}"
+          PLATFORMS="${{ steps.aws-config.outputs.platforms }}"
+          EXTRA_FLAGS=(--push)
+          if [ "${{ steps.aws-config.outputs.do_push }}" != "true" ]; then
+            EXTRA_FLAGS=(--load)
+            PLATFORMS="linux/amd64"
+          fi
+          docker buildx build \
+            --platform "${PLATFORMS}" \
+            --file Dockerfile.frontend \
+            --build-arg NODE_ENV=production \
+            --build-arg VITE_API_BASE_URL=/api \
+            --build-arg APP_VERSION="${TAG}" \
+            --build-arg PORT=8080 \
+            --tag "${FRONTEND_REPO}:${TAG}" \
+            --tag "${FRONTEND_REPO}:staging" \
+            --tag "${FRONTEND_REPO}:latest" \
+            "${EXTRA_FLAGS[@]}" \
+            .
+
+      - name: Output image URIs
+        id: image-uris
+        run: |
+          set -euo pipefail
+          BACKEND_IMAGE="${{ steps.meta.outputs.backend_repo }}:${{ steps.meta.outputs.sha }}"
+          FRONTEND_IMAGE="${{ steps.meta.outputs.frontend_repo }}:${{ steps.meta.outputs.sha }}"
+          echo "backend_image=${BACKEND_IMAGE}" >> "${GITHUB_OUTPUT}"
+          echo "frontend_image=${FRONTEND_IMAGE}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "## Image URIs"
+            echo "- Backend: \`${BACKEND_IMAGE}\`"
+            echo "- Frontend: \`${FRONTEND_IMAGE}\`"
+            echo "- Platforms: \`${{ steps.aws-config.outputs.platforms }}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+          mkdir -p artifacts
+          cat > artifacts/image-uris.json <<EOF
+          {
+            "backend_image": "${BACKEND_IMAGE}",
+            "frontend_image": "${FRONTEND_IMAGE}",
+            "tag": "${{ steps.meta.outputs.sha }}",
+            "commit": "${{ steps.meta.outputs.full_sha }}",
+            "platforms": "${{ steps.aws-config.outputs.platforms }}",
+            "registry": "${{ steps.meta.outputs.registry }}"
+          }
+          EOF
+          cat > artifacts/image-uris.txt <<EOF
+          BACKEND_IMAGE=${BACKEND_IMAGE}
+          FRONTEND_IMAGE=${FRONTEND_IMAGE}
+          IMAGE_TAG=${{ steps.meta.outputs.sha }}
+          EOF
+
+      - name: Upload image URI artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-uris-${{ steps.meta.outputs.sha }}
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 30
+
+  deploy-staging:
+    name: Staging Helm dry-run (apply withheld)
+    needs: build-and-push
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    runs-on: ubuntu-latest
+    environment: staging
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download image URI artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: image-uris-${{ needs.build-and-push.outputs.image_tag }}
+          path: artifacts
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
+      - name: Resolve AWS configuration
+        id: aws-config
+        run: |
+          set -euo pipefail
+          REGION="${{ secrets.AWS_REGION }}"
+          ACCOUNT_ID="${{ secrets.AWS_ACCOUNT_ID }}"
+          if [ -z "${REGION}" ]; then REGION="${{ env.AWS_REGION }}"; fi
+          if [ -z "${ACCOUNT_ID}" ]; then ACCOUNT_ID="${{ env.AWS_ACCOUNT_ID }}"; fi
+          echo "region=${REGION}" >> "${GITHUB_OUTPUT}"
+          echo "account_id=${ACCOUNT_ID}" >> "${GITHUB_OUTPUT}"
+
+      - name: Helm install --dry-run (validate staging chart)
+        run: |
+          set -euo pipefail
+          BACKEND_REPO="${{ steps.aws-config.outputs.account_id }}.dkr.ecr.${{ steps.aws-config.outputs.region }}.amazonaws.com/ecommerce-backend"
+          FRONTEND_REPO="${{ steps.aws-config.outputs.account_id }}.dkr.ecr.${{ steps.aws-config.outputs.region }}.amazonaws.com/ecommerce-frontend"
+          IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
+
+          helm lint ./chart/staging
+
+          # Offline dry-run equivalent of `helm install --dry-run` (no cluster required).
+          # Live `helm upgrade --install` without --dry-run is withheld for a human
+          # with staging cluster credentials and environment protection rules.
+          helm template ecommerce-staging ./chart/staging \
+            --namespace staging \
+            --values ./chart/staging/values-staging.yaml \
+            --set backend.image.repository="${BACKEND_REPO}" \
+            --set backend.image.tag="${IMAGE_TAG}" \
+            --set frontend.image.repository="${FRONTEND_REPO}" \
+            --set frontend.image.tag="${IMAGE_TAG}" \
+            > /tmp/staging-dry-run.yaml
+
+          echo "Staging Helm dry-run succeeded for tag ${IMAGE_TAG}"
+          echo "Mutating helm apply is withheld pending human approval."
+          wc -l /tmp/staging-dry-run.yaml
