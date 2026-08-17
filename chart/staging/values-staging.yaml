@@ -1,0 +1,78 @@
+# Staging environment overrides for Ecommerce App New
+
+replicaCount: 2
+
+backend:
+  image:
+    repository: 123456789012.dkr.ecr.us-east-1.amazonaws.com/ecommerce-app-new/backend
+    tag: staging
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 150m
+      memory: 192Mi
+    limits:
+      cpu: 750m
+      memory: 768Mi
+  probes:
+    liveness:
+      path: /health
+      initialDelaySeconds: 20
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      path: /ready
+      initialDelaySeconds: 8
+      periodSeconds: 8
+      timeoutSeconds: 3
+      failureThreshold: 3
+
+frontend:
+  image:
+    repository: 123456789012.dkr.ecr.us-east-1.amazonaws.com/ecommerce-app-new/frontend
+    tag: staging
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 75m
+      memory: 96Mi
+    limits:
+      cpu: 400m
+      memory: 384Mi
+  probes:
+    liveness:
+      path: /
+      initialDelaySeconds: 15
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      path: /
+      initialDelaySeconds: 5
+      periodSeconds: 8
+      timeoutSeconds: 3
+      failureThreshold: 3
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "8m"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: staging.ecommerce.example.com
+      paths:
+        - path: /api
+          pathType: Prefix
+          service: backend
+        - path: /
+          pathType: Prefix
+          service: frontend
+  tls:
+    - secretName: ecommerce-staging-tls
+      hosts:
+        - staging.ecommerce.example.com
+
+podAnnotations:
+  environment: staging

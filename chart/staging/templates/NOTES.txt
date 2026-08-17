@@ -1,0 +1,7 @@
+# Ecommerce staging chart
+#
+# Preview (read-only):
+#   helm template ecommerce-staging ./chart/staging -f ./chart/staging/values-staging.yaml
+#   helm install ecommerce-staging ./chart/staging -f ./chart/staging/values-staging.yaml --dry-run --debug
+#
+# Apply is withheld for human approval in non-CI environments.
