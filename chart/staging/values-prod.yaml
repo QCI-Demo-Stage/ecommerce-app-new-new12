@@ -1,20 +1,49 @@
-# Default values for ecommerce-staging chart.
-# Override with values-staging.yaml for staging deployments.
-
-nameOverride: ""
-fullnameOverride: ""
+# Production overrides for Ecommerce App New.
+# Usage (human-approved apply withheld in CI — dry-run / template only):
+#   helm upgrade --install ecommerce-prod ./chart/staging \
+#     --namespace prod \
+#     -f ./chart/staging/values-prod.yaml \
+#     --set backend.image.tag=<tag> \
+#     --set frontend.image.tag=<tag>
 
 backend:
-  enabled: true
-  replicaCount: 2
+  replicaCount: 3
   image:
     repository: 123456789012.dkr.ecr.us-east-1.amazonaws.com/ecommerce-backend
     tag: latest
     pullPolicy: IfNotPresent
-  service:
-    type: ClusterIP
-    port: 3000
-    targetPort: 3000
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  probes:
+    liveness:
+      path: /health
+      initialDelaySeconds: 20
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      path: /ready
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+  env:
+    - name: NODE_ENV
+      value: production
+    - name: PORT
+      value: "3000"
+
+frontend:
+  replicaCount: 3
+  image:
+    repository: 123456789012.dkr.ecr.us-east-1.amazonaws.com/ecommerce-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
   resources:
     requests:
       cpu: 100m
@@ -25,41 +54,8 @@ backend:
   probes:
     liveness:
       path: /health
-      initialDelaySeconds: 15
-      periodSeconds: 20
-      timeoutSeconds: 5
-      failureThreshold: 3
-    readiness:
-      path: /ready
-      initialDelaySeconds: 5
-      periodSeconds: 10
-      timeoutSeconds: 3
-      failureThreshold: 3
-  env: []
-
-frontend:
-  enabled: true
-  replicaCount: 2
-  image:
-    repository: 123456789012.dkr.ecr.us-east-1.amazonaws.com/ecommerce-frontend
-    tag: latest
-    pullPolicy: IfNotPresent
-  service:
-    type: ClusterIP
-    port: 80
-    targetPort: 8080
-  resources:
-    requests:
-      cpu: 50m
-      memory: 64Mi
-    limits:
-      cpu: 250m
-      memory: 256Mi
-  probes:
-    liveness:
-      path: /health
       initialDelaySeconds: 10
-      periodSeconds: 20
+      periodSeconds: 15
       timeoutSeconds: 5
       failureThreshold: 3
     readiness:
@@ -68,17 +64,20 @@ frontend:
       periodSeconds: 10
       timeoutSeconds: 3
       failureThreshold: 3
-  env: []
-
-imagePullSecrets: []
+  env:
+    - name: NODE_ENV
+      value: production
+    - name: PORT
+      value: "8080"
 
 ingress:
   enabled: true
   className: nginx
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
   hosts:
-    - host: staging.ecommerce.example.com
+    - host: ecommerce.example.com
       paths:
         - path: /api
           pathType: Prefix
@@ -86,20 +85,11 @@ ingress:
         - path: /
           pathType: Prefix
           service: frontend
-  tls: []
+  tls:
+    - secretName: ecommerce-prod-tls
+      hosts:
+        - ecommerce.example.com
 
-serviceAccount:
-  create: true
-  annotations: {}
-  name: ""
-
-# Prometheus scrape annotations (path only; port is defined per-ServiceMonitor / scrape job).
 podAnnotations:
   prometheus.io/scrape: "true"
   prometheus.io/path: "/metrics"
-
-nodeSelector: {}
-
-tolerations: []
-
-affinity: {}

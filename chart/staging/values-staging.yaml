@@ -17,13 +17,13 @@ backend:
       memory: 512Mi
   probes:
     liveness:
-      path: /health/live
+      path: /health
       initialDelaySeconds: 20
       periodSeconds: 15
       timeoutSeconds: 5
       failureThreshold: 3
     readiness:
-      path: /health/ready
+      path: /ready
       initialDelaySeconds: 10
       periodSeconds: 10
       timeoutSeconds: 3
@@ -49,13 +49,13 @@ frontend:
       memory: 256Mi
   probes:
     liveness:
-      path: /
+      path: /health
       initialDelaySeconds: 10
       periodSeconds: 15
       timeoutSeconds: 5
       failureThreshold: 3
     readiness:
-      path: /
+      path: /ready
       initialDelaySeconds: 5
       periodSeconds: 10
       timeoutSeconds: 3
@@ -63,6 +63,8 @@ frontend:
   env:
     - name: NODE_ENV
       value: staging
+    - name: PORT
+      value: "8080"
 
 ingress:
   enabled: true

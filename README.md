@@ -1,28 +1,36 @@
 # Ecommerce App New
 
 Containerized ecommerce sample with multi-arch Docker images, GitHub Actions
-ECR push workflow, and a Helm chart for Kubernetes staging.
+ECR push / production promotion workflows, Helm chart (staging + prod values),
+Prometheus metrics, health probes, and monitoring configs.
 
 ## Layout
 
 - `Dockerfile.backend` / `Dockerfile.frontend` — multi-arch (`linux/amd64`, `linux/arm64`) images based on `node:20-alpine`
-- `.github/workflows/docker-build.yml` — buildx build/push to simulated AWS ECR, image URI artifacts, staging Helm dry-run
-- `chart/staging` — Helm chart (Deployment, Service, Ingress, probes) with `values-staging.yaml`
-- `backend/` — TypeScript Express API
-- `frontend/` — React + Vite SPA
+- `.github/workflows/docker-build.yml` — buildx build/push to simulated AWS ECR, staging Helm dry-run
+- `.github/workflows/promote-prod.yml` — one-click / tag-triggered production promotion (Helm dry-run; live apply withheld)
+- `chart/staging` — Helm chart with probes on `/health` + `/ready`, `values-staging.yaml`, `values-prod.yaml`
+- `backend/` — TypeScript Express API with `prom-client` `/metrics`
+- `frontend/` — React + Vite SPA served by Express metrics server (`/metrics`, `/health`, `/ready`)
+- `monitoring/` — Prometheus rules, scrape configs, SLOs, Grafana dashboard, PrometheusRule CRDs
+- `docs/RUNBOOK.md` — metrics, alerts, promotion, rollback
 
 ## Required repository secrets
 
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 
-Optional: `AWS_REGION`, `AWS_ACCOUNT_ID` (defaults simulate ECR account `123456789012`).
+Optional: `AWS_REGION`, `AWS_ACCOUNT_ID` (defaults simulate ECR account `123456789012`), `PROD_HEALTH_URL`.
+
+Configure the GitHub Environment `production` with required reviewers for promotion approval.
 
 ## Local verification
 
 ```bash
-actionlint .github/workflows/docker-build.yml
+./scripts/verify-monitoring.sh
 ./scripts/validate-helm-staging.sh
+cd backend && npm run lint
+cd frontend && npm run lint
 ```
 
-Live `helm upgrade --install` to the staging cluster is withheld for human approval after merge.
+Live `helm upgrade --install` and `kubectl apply` of PrometheusRules are withheld for human approval after merge.

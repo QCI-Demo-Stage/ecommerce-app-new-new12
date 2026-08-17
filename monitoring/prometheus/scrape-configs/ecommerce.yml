@@ -1,0 +1,71 @@
+# Prometheus scrape configurations for Ecommerce App New services.
+# Include from prometheus.yml via:
+#   scrape_configs:
+#     - <<: *ecommerce_backend
+# or file_sd / helm-values merge.
+scrape_configs:
+  - job_name: ecommerce-backend
+    metrics_path: /metrics
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+            - staging
+            - prod
+            - monitoring
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_service_label_app_kubernetes_io_component]
+        action: keep
+        regex: backend
+      - source_labels: [__meta_kubernetes_service_label_app_kubernetes_io_name]
+        action: keep
+        regex: ecommerce-staging|ecommerce-prod|ecommerce
+      - source_labels: [__meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: http
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_service_name]
+        target_label: service_name
+      - target_label: service
+        replacement: backend
+
+  - job_name: ecommerce-frontend
+    metrics_path: /metrics
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+            - staging
+            - prod
+            - monitoring
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_service_label_app_kubernetes_io_component]
+        action: keep
+        regex: frontend
+      - source_labels: [__meta_kubernetes_service_label_app_kubernetes_io_name]
+        action: keep
+        regex: ecommerce-staging|ecommerce-prod|ecommerce
+      - source_labels: [__meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: http
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_service_name]
+        target_label: service_name
+      - target_label: service
+        replacement: frontend
+
+  # Optional: GitHub Actions / CI exporter exposing CIJobFailure{job="build"}.
+  - job_name: ci-exporter
+    metrics_path: /metrics
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - ci-exporter.monitoring.svc.cluster.local:8080
+        labels:
+          service: ci

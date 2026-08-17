@@ -1,6 +1,7 @@
 # Multi-arch frontend image for Ecommerce App New (React + Vite)
 # Supports linux/amd64 and linux/arm64 via Docker buildx.
-# Base image: node:20-alpine (build + runtime).
+# Runtime serves the SPA plus Prometheus /metrics and Kubernetes /health|/ready
+# endpoints via a small Express TypeScript server (prom-client).
 # Example:
 #   docker buildx build --platform linux/amd64,linux/arm64 \
 #     -f Dockerfile.frontend \
@@ -17,7 +18,7 @@ WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm ci || npm install
 
-# ---- Build (Vite React app) ----
+# ---- Build (Vite React app + metrics server) ----
 FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine AS build
 WORKDIR /app
 
@@ -31,14 +32,21 @@ ENV NODE_ENV=${NODE_ENV} \
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY frontend/package.json frontend/package-lock.json* ./
-COPY frontend/tsconfig.json frontend/tsconfig.app.json frontend/tsconfig.node.json ./
+COPY frontend/tsconfig.json frontend/tsconfig.app.json frontend/tsconfig.node.json frontend/tsconfig.server.json ./
 COPY frontend/vite.config.ts frontend/index.html ./
 COPY frontend/src ./src
 COPY frontend/public ./public
+COPY frontend/server ./server
 
 RUN npm run build
 
-# ---- Runtime (node:20-alpine serves static build via `serve`) ----
+# ---- Runtime deps (production only) ----
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine AS runtime-deps
+WORKDIR /app
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci --omit=dev || npm install --omit=dev
+
+# ---- Runtime ----
 FROM node:${NODE_VERSION}-alpine AS runtime
 WORKDIR /app
 
@@ -51,15 +59,17 @@ ENV NODE_ENV=${NODE_ENV} \
     PORT=${PORT}
 
 RUN addgroup -S app && adduser -S app -G app \
-  && apk add --no-cache wget \
-  && npm install -g serve@14
+  && apk add --no-cache wget
 
+COPY --from=runtime-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/server-dist ./server-dist
+COPY frontend/package.json ./
 
 USER app
 EXPOSE ${PORT}
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget -qO- "http://127.0.0.1:${PORT}/" || exit 1
+  CMD wget -qO- "http://127.0.0.1:${PORT}/health" || exit 1
 
-CMD ["sh", "-c", "serve -s dist -l ${PORT}"]
+CMD ["node", "server-dist/index.js"]

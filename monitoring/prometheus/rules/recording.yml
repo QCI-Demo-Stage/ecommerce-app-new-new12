@@ -1,0 +1,45 @@
+# Recording rules supporting SLO burn-rate calculations and latency dashboards.
+# Validate: promtool check rules monitoring/prometheus/rules/*.yml
+groups:
+  - name: ecommerce.recording
+    interval: 30s
+    rules:
+      - record: job:http_request_duration_seconds:p95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, service, job) (
+              rate(http_request_duration_seconds_bucket{service=~"backend|frontend"}[5m])
+            )
+          )
+
+      - record: job:http_request_duration_seconds:p99
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum by (le, service, job) (
+              rate(http_request_duration_seconds_bucket{service=~"backend|frontend"}[5m])
+            )
+          )
+
+      - record: job:http_requests:rate5m
+        expr: |
+          sum by (service, job) (
+            rate(http_requests_total{service=~"backend|frontend"}[5m])
+          )
+
+      - record: job:http_request_errors:rate5m
+        expr: |
+          sum by (service, job) (
+            rate(http_request_errors_total{service=~"backend|frontend"}[5m])
+          )
+
+      - record: job:http_request_error_ratio:rate5m
+        expr: |
+          job:http_request_errors:rate5m
+          /
+          clamp_min(job:http_requests:rate5m, 1e-9)
+
+      - record: job:http_request_success_ratio:rate5m
+        expr: |
+          1 - job:http_request_error_ratio:rate5m
