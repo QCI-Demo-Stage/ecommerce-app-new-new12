@@ -1,0 +1,14 @@
+Ecommerce App New (staging) has been deployed.
+
+1. Frontend service: {{ include "ecommerce.fullname" . }}-frontend
+2. Backend service:  {{ include "ecommerce.fullname" . }}-backend
+{{- if .Values.ingress.enabled }}
+3. Ingress host(s):
+{{- range .Values.ingress.hosts }}
+   - http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+{{- end }}
+
+Image tags:
+  frontend={{ .Values.image.frontend.repository }}:{{ .Values.image.frontend.tag }}
+  backend={{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag }}

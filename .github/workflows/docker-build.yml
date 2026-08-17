@@ -1,0 +1,265 @@
+# Build multi-arch Docker images, push to simulated AWS ECR, and deploy to staging.
+#
+# Required repository secrets (never commit credentials):
+#   AWS_ACCESS_KEY_ID
+#   AWS_SECRET_ACCESS_KEY
+#   AWS_REGION                 (e.g. us-east-1)
+#   AWS_ACCOUNT_ID             (12-digit account id used for ECR registry)
+#   KUBE_CONFIG_STAGING        (base64-encoded kubeconfig for the staging cluster)
+#
+# Optional variables:
+#   ECR_REGISTRY_PREFIX        (defaults to ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com)
+#
+# Mutating deploy/push steps run only in GitHub Actions after merge — not from local agents.
+
+name: Docker Build Push and Staging Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "Dockerfile.backend"
+      - "Dockerfile.frontend"
+      - "chart/staging/**"
+      - ".github/workflows/docker-build.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "Dockerfile.backend"
+      - "Dockerfile.frontend"
+      - "chart/staging/**"
+      - ".github/workflows/docker-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  actions: write
+
+env:
+  PLATFORMS: linux/amd64,linux/arm64
+  FRONTEND_IMAGE_NAME: ecommerce-frontend
+  BACKEND_IMAGE_NAME: ecommerce-backend
+  HELM_RELEASE: ecommerce-staging
+  HELM_NAMESPACE: staging
+
+jobs:
+  build-and-push:
+    name: Build and push multi-arch images
+    runs-on: ubuntu-latest
+    outputs:
+      frontend_image: ${{ steps.meta.outputs.frontend_image }}
+      backend_image: ${{ steps.meta.outputs.backend_image }}
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        if: github.event_name != 'pull_request'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        if: github.event_name != 'pull_request'
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACCOUNT_ID="${{ secrets.AWS_ACCOUNT_ID }}"
+          REGION="${{ secrets.AWS_REGION }}"
+          if [[ -z "${ACCOUNT_ID}" || -z "${REGION}" ]]; then
+            ACCOUNT_ID="000000000000"
+            REGION="us-east-1"
+          fi
+          REGISTRY="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
+          TAG="${GITHUB_SHA}"
+          FRONTEND_URI="${REGISTRY}/${{ env.FRONTEND_IMAGE_NAME }}:${TAG}"
+          BACKEND_URI="${REGISTRY}/${{ env.BACKEND_IMAGE_NAME }}:${TAG}"
+          {
+            echo "registry=${REGISTRY}"
+            echo "image_tag=${TAG}"
+            echo "frontend_image=${FRONTEND_URI}"
+            echo "backend_image=${BACKEND_URI}"
+          } >> "${GITHUB_OUTPUT}"
+          mkdir -p artifacts
+          {
+            echo "frontend=${FRONTEND_URI}"
+            echo "backend=${BACKEND_URI}"
+            echo "tag=${TAG}"
+            echo "platforms=${{ env.PLATFORMS }}"
+          } > artifacts/image-uris.txt
+          echo "Frontend image: ${FRONTEND_URI}"
+          echo "Backend image:  ${BACKEND_URI}"
+
+      - name: Ensure ECR repositories exist
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for repo in "${{ env.FRONTEND_IMAGE_NAME }}" "${{ env.BACKEND_IMAGE_NAME }}"; do
+            aws ecr describe-repositories --repository-names "${repo}" >/dev/null 2>&1 \
+              || aws ecr create-repository --repository-name "${repo}" --image-scanning-configuration scanOnPush=true
+          done
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push backend (multi-arch)
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          docker buildx build \
+            --platform "${{ env.PLATFORMS }}" \
+            --file Dockerfile.backend \
+            --build-arg BUILD_VERSION="${{ github.ref_name }}" \
+            --build-arg BUILD_SHA="${{ github.sha }}" \
+            --build-arg PORT=3001 \
+            --tag "${{ steps.meta.outputs.backend_image }}" \
+            --tag "${{ steps.meta.outputs.registry }}/${{ env.BACKEND_IMAGE_NAME }}:staging" \
+            --push \
+            .
+
+      - name: Build and push frontend (multi-arch)
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          docker buildx build \
+            --platform "${{ env.PLATFORMS }}" \
+            --file Dockerfile.frontend \
+            --build-arg BUILD_VERSION="${{ github.ref_name }}" \
+            --build-arg BUILD_SHA="${{ github.sha }}" \
+            --build-arg VITE_API_BASE_URL=/api \
+            --build-arg PORT=3000 \
+            --tag "${{ steps.meta.outputs.frontend_image }}" \
+            --tag "${{ steps.meta.outputs.registry }}/${{ env.FRONTEND_IMAGE_NAME }}:staging" \
+            --push \
+            .
+
+      # On pull requests: build only (no push) to validate Dockerfiles without mutating ECR.
+      - name: Build backend (PR dry-run, no push)
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          docker buildx build \
+            --platform linux/amd64 \
+            --file Dockerfile.backend \
+            --build-arg BUILD_SHA="${{ github.sha }}" \
+            --tag "local/${{ env.BACKEND_IMAGE_NAME }}:pr" \
+            --load \
+            .
+
+      - name: Build frontend (PR dry-run, no push)
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          docker buildx build \
+            --platform linux/amd64 \
+            --file Dockerfile.frontend \
+            --build-arg BUILD_SHA="${{ github.sha }}" \
+            --tag "local/${{ env.FRONTEND_IMAGE_NAME }}:pr" \
+            --load \
+            .
+
+      - name: Upload image URI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-uris
+          path: artifacts/image-uris.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  deploy-staging:
+    name: Deploy to Kubernetes staging (Helm)
+    needs: build-and-push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure kubeconfig
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${HOME}/.kube"
+          echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > "${HOME}/.kube/config"
+          chmod 600 "${HOME}/.kube/config"
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+
+      - name: Helm lint
+        run: helm lint chart/staging -f chart/staging/values-staging.yaml
+
+      # Client-side dry-run (equivalent to `helm install --dry-run` without cluster mutation).
+      - name: Helm install dry-run
+        run: |
+          set -euo pipefail
+          FRONTEND_REPO="$(echo '${{ needs.build-and-push.outputs.frontend_image }}' | cut -d: -f1)"
+          BACKEND_REPO="$(echo '${{ needs.build-and-push.outputs.backend_image }}' | cut -d: -f1)"
+          IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
+          helm template "${{ env.HELM_RELEASE }}" chart/staging \
+            --namespace "${{ env.HELM_NAMESPACE }}" \
+            -f chart/staging/values-staging.yaml \
+            --set "image.frontend.repository=${FRONTEND_REPO}" \
+            --set "image.frontend.tag=${IMAGE_TAG}" \
+            --set "image.backend.repository=${BACKEND_REPO}" \
+            --set "image.backend.tag=${IMAGE_TAG}" \
+            > /tmp/staging-manifests.yaml
+          echo "Dry-run rendered $(grep -c '^kind:' /tmp/staging-manifests.yaml) resources"
+
+      - name: Helm upgrade --install (staging)
+        run: |
+          set -euo pipefail
+          FRONTEND_REPO="$(echo '${{ needs.build-and-push.outputs.frontend_image }}' | cut -d: -f1)"
+          BACKEND_REPO="$(echo '${{ needs.build-and-push.outputs.backend_image }}' | cut -d: -f1)"
+          IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
+          helm upgrade --install "${{ env.HELM_RELEASE }}" chart/staging \
+            --namespace "${{ env.HELM_NAMESPACE }}" \
+            --create-namespace \
+            -f chart/staging/values-staging.yaml \
+            --set "image.frontend.repository=${FRONTEND_REPO}" \
+            --set "image.frontend.tag=${IMAGE_TAG}" \
+            --set "image.backend.repository=${BACKEND_REPO}" \
+            --set "image.backend.tag=${IMAGE_TAG}" \
+            --wait \
+            --timeout 10m
+
+      - name: Record deployed image URIs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          cat > artifacts/deployed-images.txt <<EOF
+          frontend=${{ needs.build-and-push.outputs.frontend_image }}
+          backend=${{ needs.build-and-push.outputs.backend_image }}
+          release=${{ env.HELM_RELEASE }}
+          namespace=${{ env.HELM_NAMESPACE }}
+          EOF
+
+      - name: Upload deploy artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-deploy
+          path: artifacts/deployed-images.txt
+          retention-days: 14

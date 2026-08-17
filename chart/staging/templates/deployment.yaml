@@ -1,0 +1,72 @@
+{{- $root := . -}}
+{{- range $component := list "frontend" "backend" }}
+{{- $image := index $root.Values.image $component }}
+{{- $replicas := index $root.Values.replicaCount $component }}
+{{- $resources := index $root.Values.resources $component }}
+{{- $probes := index $root.Values.probes $component }}
+{{- $svc := index $root.Values.service $component }}
+{{- $envMap := index $root.Values.env $component | default dict }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ecommerce.fullname" $root }}-{{ $component }}
+  labels:
+    {{- include "ecommerce.labels" $root | nindent 4 }}
+    {{- include "ecommerce.selectorLabels" (dict "root" $root "component" $component) | nindent 4 }}
+spec:
+  replicas: {{ $replicas }}
+  selector:
+    matchLabels:
+      {{- include "ecommerce.selectorLabels" (dict "root" $root "component" $component) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ecommerce.selectorLabels" (dict "root" $root "component" $component) | nindent 8 }}
+    spec:
+      containers:
+        - name: {{ $component }}
+          image: "{{ $image.repository }}:{{ $image.tag }}"
+          imagePullPolicy: {{ $image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ $svc.targetPort }}
+              protocol: TCP
+          {{- if $envMap }}
+          env:
+            {{- range $key, $value := $envMap }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- end }}
+          resources:
+            {{- toYaml $resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: {{ $probes.liveness.path }}
+              port: {{ $probes.liveness.port }}
+            initialDelaySeconds: {{ $probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ $probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ $probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ $probes.liveness.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: {{ $probes.readiness.path }}
+              port: {{ $probes.readiness.port }}
+            initialDelaySeconds: {{ $probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ $probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ $probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ $probes.readiness.failureThreshold }}
+      {{- with $root.Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $root.Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $root.Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
