@@ -11,3 +11,6 @@ dist/
 build/
 .idea/
 *.log
+*.tgz
+coverage/
+artifacts/

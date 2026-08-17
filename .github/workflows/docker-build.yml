@@ -1,0 +1,233 @@
+# Multi-arch Docker build & push to simulated AWS ECR
+# Requires repository secrets:
+#   AWS_ACCESS_KEY_ID
+#   AWS_SECRET_ACCESS_KEY
+#   AWS_REGION          (e.g. us-east-1)
+#   AWS_ACCOUNT_ID     (e.g. 123456789012 — simulated ECR account)
+
+name: Docker Build and Push
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ACCOUNT_ID: "123456789012"
+  PLATFORMS: linux/amd64,linux/arm64
+
+jobs:
+  build-and-push:
+    name: Build multi-arch images and push to ECR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    outputs:
+      backend_image: ${{ steps.image-uris.outputs.backend_image }}
+      frontend_image: ${{ steps.image-uris.outputs.frontend_image }}
+      image_tag: ${{ steps.meta.outputs.sha }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Resolve AWS configuration
+        id: aws-config
+        run: |
+          REGION="${{ secrets.AWS_REGION }}"
+          ACCOUNT_ID="${{ secrets.AWS_ACCOUNT_ID }}"
+          if [ -z "$REGION" ]; then REGION="${{ env.AWS_REGION }}"; fi
+          if [ -z "$ACCOUNT_ID" ]; then ACCOUNT_ID="${{ env.AWS_ACCOUNT_ID }}"; fi
+          echo "region=${REGION}" >> "$GITHUB_OUTPUT"
+          echo "account_id=${ACCOUNT_ID}" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "platforms=linux/amd64" >> "$GITHUB_OUTPUT"
+            echo "do_push=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "platforms=${{ env.PLATFORMS }}" >> "$GITHUB_OUTPUT"
+            echo "do_push=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set image metadata
+        id: meta
+        run: |
+          SHA_SHORT="${GITHUB_SHA::12}"
+          echo "sha=${SHA_SHORT}" >> "$GITHUB_OUTPUT"
+          echo "full_sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          REGISTRY="${{ steps.aws-config.outputs.account_id }}.dkr.ecr.${{ steps.aws-config.outputs.region }}.amazonaws.com"
+          echo "registry=${REGISTRY}" >> "$GITHUB_OUTPUT"
+          echo "backend_repo=${REGISTRY}/ecommerce-backend" >> "$GITHUB_OUTPUT"
+          echo "frontend_repo=${REGISTRY}/ecommerce-frontend" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials
+        if: github.event_name != 'pull_request'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ steps.aws-config.outputs.region }}
+
+      - name: Login to Amazon ECR (simulated)
+        if: github.event_name != 'pull_request'
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Ensure ECR repositories exist
+        if: github.event_name != 'pull_request'
+        run: |
+          for REPO in ecommerce-backend ecommerce-frontend; do
+            aws ecr describe-repositories --repository-names "$REPO" --region "${{ steps.aws-config.outputs.region }}" 2>/dev/null \
+              || aws ecr create-repository --repository-name "$REPO" --region "${{ steps.aws-config.outputs.region }}" --image-scanning-configuration scanOnPush=true
+          done
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.backend
+          platforms: ${{ steps.aws-config.outputs.platforms }}
+          push: ${{ steps.aws-config.outputs.do_push == 'true' }}
+          load: ${{ steps.aws-config.outputs.do_push != 'true' }}
+          tags: |
+            ${{ steps.meta.outputs.backend_repo }}:${{ steps.meta.outputs.sha }}
+            ${{ steps.meta.outputs.backend_repo }}:staging
+            ${{ steps.meta.outputs.backend_repo }}:latest
+          build-args: |
+            NODE_ENV=production
+            PORT=3000
+            APP_VERSION=${{ steps.meta.outputs.sha }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+          provenance: false
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.frontend
+          platforms: ${{ steps.aws-config.outputs.platforms }}
+          push: ${{ steps.aws-config.outputs.do_push == 'true' }}
+          load: ${{ steps.aws-config.outputs.do_push != 'true' }}
+          tags: |
+            ${{ steps.meta.outputs.frontend_repo }}:${{ steps.meta.outputs.sha }}
+            ${{ steps.meta.outputs.frontend_repo }}:staging
+            ${{ steps.meta.outputs.frontend_repo }}:latest
+          build-args: |
+            NODE_ENV=production
+            VITE_API_BASE_URL=/api
+            APP_VERSION=${{ steps.meta.outputs.sha }}
+            PORT=8080
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+          provenance: false
+
+      - name: Output image URIs
+        id: image-uris
+        run: |
+          BACKEND_IMAGE="${{ steps.meta.outputs.backend_repo }}:${{ steps.meta.outputs.sha }}"
+          FRONTEND_IMAGE="${{ steps.meta.outputs.frontend_repo }}:${{ steps.meta.outputs.sha }}"
+          echo "backend_image=${BACKEND_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "frontend_image=${FRONTEND_IMAGE}" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Image URIs"
+            echo "- Backend: \`${BACKEND_IMAGE}\`"
+            echo "- Frontend: \`${FRONTEND_IMAGE}\`"
+            echo "- Platforms: \`${{ steps.aws-config.outputs.platforms }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p artifacts
+          cat > artifacts/image-uris.json <<EOF
+          {
+            "backend_image": "${BACKEND_IMAGE}",
+            "frontend_image": "${FRONTEND_IMAGE}",
+            "tag": "${{ steps.meta.outputs.sha }}",
+            "commit": "${{ steps.meta.outputs.full_sha }}",
+            "platforms": "${{ steps.aws-config.outputs.platforms }}",
+            "registry": "${{ steps.meta.outputs.registry }}"
+          }
+          EOF
+          cat > artifacts/image-uris.txt <<EOF
+          BACKEND_IMAGE=${BACKEND_IMAGE}
+          FRONTEND_IMAGE=${FRONTEND_IMAGE}
+          IMAGE_TAG=${{ steps.meta.outputs.sha }}
+          EOF
+
+      - name: Upload image URI artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-uris-${{ steps.meta.outputs.sha }}
+          path: artifacts/
+          retention-days: 30
+
+  deploy-staging:
+    name: Deploy to staging with Helm
+    needs: build-and-push
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: staging
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download image URI artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: image-uris-${{ needs.build-and-push.outputs.image_tag }}
+          path: artifacts
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
+      - name: Configure kubeconfig for staging
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+
+      - name: Resolve AWS configuration
+        id: aws-config
+        run: |
+          REGION="${{ secrets.AWS_REGION }}"
+          ACCOUNT_ID="${{ secrets.AWS_ACCOUNT_ID }}"
+          if [ -z "$REGION" ]; then REGION="${{ env.AWS_REGION }}"; fi
+          if [ -z "$ACCOUNT_ID" ]; then ACCOUNT_ID="${{ env.AWS_ACCOUNT_ID }}"; fi
+          echo "region=${REGION}" >> "$GITHUB_OUTPUT"
+          echo "account_id=${ACCOUNT_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Helm dry-run (validate chart)
+        run: |
+          helm upgrade --install ecommerce-staging ./chart/staging \
+            -f ./chart/staging/values-staging.yaml \
+            --set backend.image.repository="${{ steps.aws-config.outputs.account_id }}.dkr.ecr.${{ steps.aws-config.outputs.region }}.amazonaws.com/ecommerce-backend" \
+            --set backend.image.tag="${{ needs.build-and-push.outputs.image_tag }}" \
+            --set frontend.image.repository="${{ steps.aws-config.outputs.account_id }}.dkr.ecr.${{ steps.aws-config.outputs.region }}.amazonaws.com/ecommerce-frontend" \
+            --set frontend.image.tag="${{ needs.build-and-push.outputs.image_tag }}" \
+            --namespace staging \
+            --create-namespace \
+            --dry-run=client
+
+      - name: Helm deploy to staging
+        run: |
+          helm upgrade --install ecommerce-staging ./chart/staging \
+            -f ./chart/staging/values-staging.yaml \
+            --set backend.image.repository="${{ steps.aws-config.outputs.account_id }}.dkr.ecr.${{ steps.aws-config.outputs.region }}.amazonaws.com/ecommerce-backend" \
+            --set backend.image.tag="${{ needs.build-and-push.outputs.image_tag }}" \
+            --set frontend.image.repository="${{ steps.aws-config.outputs.account_id }}.dkr.ecr.${{ steps.aws-config.outputs.region }}.amazonaws.com/ecommerce-frontend" \
+            --set frontend.image.tag="${{ needs.build-and-push.outputs.image_tag }}" \
+            --namespace staging \
+            --create-namespace \
+            --wait \
+            --timeout 5m
