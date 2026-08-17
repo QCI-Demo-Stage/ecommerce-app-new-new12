@@ -85,3 +85,12 @@ ingress:
     - secretName: ecommerce-staging-tls
       hosts:
         - staging.ecommerce.example.com
+
+serviceMonitor:
+  enabled: true
+  path: /metrics
+  interval: 15s
+  scrapeTimeout: 10s
+  labels:
+    release: kube-prometheus
+    prometheus: kube-prometheus

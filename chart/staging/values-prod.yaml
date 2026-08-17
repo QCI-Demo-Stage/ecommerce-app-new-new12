@@ -94,3 +94,12 @@ ingress:
 podAnnotations:
   prometheus.io/scrape: "true"
   prometheus.io/path: "/metrics"
+
+serviceMonitor:
+  enabled: true
+  path: /metrics
+  interval: 15s
+  scrapeTimeout: 10s
+  labels:
+    release: kube-prometheus
+    prometheus: kube-prometheus

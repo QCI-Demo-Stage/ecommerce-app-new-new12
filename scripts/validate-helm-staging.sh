@@ -40,4 +40,20 @@ fi
 echo "==> sample rendered resources"
 grep -E '^kind: ' /tmp/helm-install-dry-run.yaml | sort | uniq -c
 
+echo "==> probe + metrics path sanity"
+grep -E 'livenessProbe:|readinessProbe:|path: /(health|ready|metrics)' /tmp/helm-install-dry-run.yaml | head -60
+
+echo "==> kubectl apply --dry-run=client (or kubeconform offline)"
+if kubectl apply --dry-run=client --validate=false -f /tmp/helm-install-dry-run.yaml >/tmp/kubectl-dry-run.out 2>/tmp/kubectl-dry-run.err; then
+  cat /tmp/kubectl-dry-run.out
+  echo "kubectl apply --dry-run=client OK"
+elif command -v kubeconform >/dev/null 2>&1; then
+  echo "kubectl API unreachable; using kubeconform offline validation"
+  kubeconform -summary -ignore-missing-schemas -kubernetes-version 1.29.0 /tmp/helm-install-dry-run.yaml
+else
+  echo "kubectl dry-run unavailable and kubeconform not installed; helm template already succeeded"
+  tr '\n' ' ' </tmp/kubectl-dry-run.err || true
+  echo
+fi
+
 echo "DRY-RUN OK: staging chart rendered successfully"

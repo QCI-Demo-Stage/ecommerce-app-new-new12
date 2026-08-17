@@ -43,6 +43,16 @@ kubectl -n staging port-forward svc/ecommerce-staging-frontend 8080:80
 curl -s localhost:8080/metrics | grep http_request_duration
 ```
 
+Prometheus Operator discovers targets via Helm `ServiceMonitor` resources
+(`chart/staging/templates/servicemonitor.yaml`, path `/metrics`, interval 15s).
+Confirm scrape status:
+
+```bash
+kubectl -n staging get servicemonitor
+kubectl -n monitoring get prometheusrule
+# In Prometheus UI: Status → Targets → ecommerce-*-backend / frontend
+```
+
 ### Grafana
 
 Import `monitoring/grafana/dashboards/ecommerce-overview.json` into Grafana
