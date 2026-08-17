@@ -1,0 +1,100 @@
+# Default chart values (overridden by values-staging.yaml in CI)
+nameOverride: ""
+fullnameOverride: "ecommerce"
+
+replicaCount:
+  frontend: 2
+  backend: 2
+
+image:
+  frontend:
+    repository: "000000000000.dkr.ecr.us-east-1.amazonaws.com/ecommerce-frontend"
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  backend:
+    repository: "000000000000.dkr.ecr.us-east-1.amazonaws.com/ecommerce-backend"
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+service:
+  frontend:
+    type: ClusterIP
+    port: 80
+    targetPort: 3000
+  backend:
+    type: ClusterIP
+    port: 80
+    targetPort: 3001
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+  hosts:
+    - host: staging.ecommerce.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: frontend
+        - path: /api
+          pathType: Prefix
+          service: backend
+  tls: []
+
+resources:
+  frontend:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+  backend:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+probes:
+  frontend:
+    liveness:
+      path: /
+      port: http
+      initialDelaySeconds: 15
+      periodSeconds: 20
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      path: /
+      port: http
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+  backend:
+    liveness:
+      path: /health
+      port: http
+      initialDelaySeconds: 15
+      periodSeconds: 20
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      path: /ready
+      port: http
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+
+env:
+  backend:
+    NODE_ENV: staging
+  frontend: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

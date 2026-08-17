@@ -1,0 +1,21 @@
+{{- $root := . -}}
+{{- range $component := list "frontend" "backend" }}
+{{- $svc := index $root.Values.service $component }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ecommerce.fullname" $root }}-{{ $component }}
+  labels:
+    {{- include "ecommerce.labels" $root | nindent 4 }}
+    {{- include "ecommerce.selectorLabels" (dict "root" $root "component" $component) | nindent 4 }}
+spec:
+  type: {{ $svc.type }}
+  ports:
+    - port: {{ $svc.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "ecommerce.selectorLabels" (dict "root" $root "component" $component) | nindent 4 }}
+{{- end }}

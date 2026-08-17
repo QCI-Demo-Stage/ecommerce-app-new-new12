@@ -1,0 +1,56 @@
+# syntax=docker/dockerfile:1.7
+# Multi-arch frontend image (linux/amd64, linux/arm64) via docker buildx.
+# Build stage compiles the Vite + React (TypeScript) SPA; runtime serves static assets.
+# Build: docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile.frontend -t <image> .
+
+ARG NODE_VERSION=20
+
+# -----------------------------------------------------------------------------
+# Build (Vite)
+# -----------------------------------------------------------------------------
+FROM node:${NODE_VERSION}-alpine AS build
+WORKDIR /app
+
+ARG BUILD_VERSION=dev
+ARG BUILD_SHA=unknown
+ARG VITE_API_BASE_URL=/api
+ENV BUILD_VERSION=${BUILD_VERSION} \
+    BUILD_SHA=${BUILD_SHA} \
+    VITE_API_BASE_URL=${VITE_API_BASE_URL}
+
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci || npm install
+
+COPY frontend/tsconfig.json frontend/tsconfig.node.json frontend/vite.config.ts frontend/index.html ./
+COPY frontend/src ./src
+COPY frontend/public ./public
+
+RUN npm run build
+
+# -----------------------------------------------------------------------------
+# Runtime (static file server)
+# -----------------------------------------------------------------------------
+FROM node:${NODE_VERSION}-alpine AS runtime
+WORKDIR /app
+
+ARG BUILD_VERSION=dev
+ARG BUILD_SHA=unknown
+ARG PORT=3000
+
+ENV NODE_ENV=production \
+    PORT=${PORT} \
+    BUILD_VERSION=${BUILD_VERSION} \
+    BUILD_SHA=${BUILD_SHA}
+
+RUN addgroup -S app && adduser -S app -G app \
+  && npm install --omit=dev serve@14
+
+COPY --from=build /app/dist ./dist
+
+USER app
+EXPOSE ${PORT}
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget -qO- "http://127.0.0.1:${PORT}/" || exit 1
+
+CMD ["npx", "serve", "-s", "dist", "-l", "tcp://0.0.0.0:3000"]
