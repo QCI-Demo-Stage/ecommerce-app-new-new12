@@ -6,6 +6,7 @@ import express, {
   type Response,
 } from "express";
 import { authRouter } from "./routes/auth";
+import { paymentsRouter } from "./routes/payments";
 import {
   requireAuth,
   type AuthenticatedRequest,
@@ -38,6 +39,9 @@ app.get("/api", (_req: Request, res: Response) => {
 
 /** OAuth2/JWT authentication endpoints */
 app.use("/auth", authRouter);
+
+/** Payment abstraction — createCustomer, chargeOrder, refund */
+app.use("/payments", paymentsRouter);
 
 /**
  * Example protected route — JWT validated on every request via requireAuth.
