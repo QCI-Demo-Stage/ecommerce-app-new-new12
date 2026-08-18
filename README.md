@@ -1,4 +1,28 @@
-# Ecommerce App New — User Authentication Service
+# Ecommerce App New
+
+Monorepo for the Ecommerce App New backend and shared frontend UI foundation.
+
+## Packages
+
+| Package | Path | Description |
+|---------|------|-------------|
+| Backend API | [`backend/`](backend/) | OAuth2/JWT authentication and core REST services |
+| UI library | [`frontend/`](frontend/) | React + TypeScript component library, design tokens, and responsive `Layout` |
+
+## Frontend UI library
+
+Reusable components (`Button`, `Input`, `Card`, `Navigation`) and a mobile-first responsive layout with breakpoint tokens (mobile / tablet / desktop), safe-area insets, Jest tests, and Storybook docs.
+
+```bash
+cd frontend
+npm install
+npm test
+npm run storybook
+```
+
+See [`frontend/README.md`](frontend/README.md) for exports, tokens, and visual regression notes.
+
+## User Authentication Service
 
 Secure OAuth2/JWT authentication for the ecommerce backend.
 

@@ -11,3 +11,6 @@ dist/
 build/
 .idea/
 *.log
+storybook-static/
+coverage/
+*.tsbuildinfo
