@@ -1,21 +1,26 @@
-# Ecommerce App New — User Authentication Service
+# Ecommerce App New
 
-Secure OAuth2/JWT authentication for the ecommerce backend.
+Mobile-first ecommerce platform: Express/JWT backend and React UI component library.
 
-## Auth flow diagram
+## Packages
 
-See [docs/auth_flow.png](docs/auth_flow.png) for the registration, login, token issuance, and refresh sequence diagram.
+| Path | Description |
+|------|-------------|
+| [`backend/`](./backend) | REST API — auth (register, login, refresh) and protected routes |
+| [`frontend/`](./frontend) | Shared UI library (Button, Input, Card, Navigation), design tokens, responsive `Layout` |
 
-## Endpoints
+## Frontend (component library)
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `POST` | `/auth/register` | Public | Register with email/password (bcrypt-hashed) |
-| `POST` | `/auth/login` | Public | Login; returns access + refresh JWTs |
-| `POST` | `/auth/refresh` | Public | Exchange refresh token for a new token pair |
-| `GET` | `/api/me` | Bearer access token | Example protected route |
+```bash
+cd frontend
+npm install
+npm run test
+npm run storybook
+```
 
-## Quick start
+See [frontend/README.md](./frontend/README.md) for tokens, breakpoints, and usage.
+
+## Backend (auth service)
 
 ```bash
 cd backend
@@ -24,4 +29,4 @@ npm install
 npm run dev
 ```
 
-Set `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` to long random values (≥32 characters) before any non-local use.
+Auth flow diagram: [docs/auth_flow.png](./docs/auth_flow.png).
