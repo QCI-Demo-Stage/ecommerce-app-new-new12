@@ -1,0 +1,33 @@
+{
+  "name": "ecommerce-app-new",
+  "version": "0.1.0",
+  "description": "Ecommerce App — PostgreSQL schema, migrations, and seed data",
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint:migrations": "tsc --noEmit -p tsconfig.json",
+    "migrate:up": "node-pg-migrate up --no-check-order",
+    "migrate:down": "node-pg-migrate down",
+    "migrate:create": "node-pg-migrate create",
+    "migrate:redo": "node-pg-migrate redo",
+    "seed": "tsx src/seeds/run-seed.ts",
+    "verify": "tsx scripts/verify-migrations.ts",
+    "verify:sql": "tsx scripts/verify-sql-syntax.ts",
+    "test": "npm run typecheck && npm run verify"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "node-pg-migrate": "^7.9.1",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/pg": "^8.11.10",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
