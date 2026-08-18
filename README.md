@@ -24,9 +24,14 @@ Design & security model: [docs/payment-service-design.md](../docs/payment-servic
 | `POST` | `/payments/charges` | Bearer | `chargeOrder` |
 | `POST` | `/payments/refunds` | Bearer | `refund` |
 
+Stripe is the primary provider adapter (`StripeAdapter`): customer creation,
+PaymentIntent charge/confirm, and refunds via the official Stripe Node SDK.
 Only **tokenized** payment method references are accepted. Tokens are encrypted
 with a simulated KMS (`PAYMENT_KMS_KEY`) before storage. Schema migration
 (authored, not auto-applied): `migrations/1744500000000_create-payment-tokens.ts`.
+
+Set `STRIPE_SECRET_KEY` to a sandbox `sk_test_…` key for live adapter calls.
+When unset, the service falls back to `SimulatedStripeAdapter` (offline tests).
 
 ## Quick start
 
@@ -43,6 +48,6 @@ npm run typecheck
 npm run openapi:lint
 ```
 
-Set `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, and `PAYMENT_KMS_KEY` before any
-non-local use. Do **not** run `migrate:up` against shared environments without
-explicit human approval.
+Set `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `PAYMENT_KMS_KEY`, and
+`STRIPE_SECRET_KEY` before any non-local use. Do **not** run `migrate:up`
+against shared environments without explicit human approval.

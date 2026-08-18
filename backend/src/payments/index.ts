@@ -3,8 +3,12 @@ export { PaymentError } from "./errors";
 export { SimulatedKmsClient, type KmsClient } from "./kms";
 export {
   StripeAdapter,
+  SimulatedStripeAdapter,
   PayPalAdapter,
   getProvider,
+  createDefaultStripeAdapter,
+  createStripeClient,
+  mapStripeError,
   type PaymentProvider,
 } from "./providers";
 export type {

@@ -6,7 +6,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { PaymentError, PaymentService, SimulatedKmsClient } from "../src/payments";
+import {
+  PaymentError,
+  PaymentService,
+  SimulatedKmsClient,
+  SimulatedStripeAdapter,
+} from "../src/payments";
 import type { PaymentLogger } from "../src/payments/logger";
 
 function silentLogger(): PaymentLogger {
@@ -19,6 +24,10 @@ function createService(): PaymentService {
     kms: new SimulatedKmsClient(
       Buffer.from("0123456789abcdef0123456789abcdef"), // 32 bytes
     ),
+    // Keep PaymentService tests offline — inject simulated Stripe (no live SDK).
+    providers: {
+      stripe: new SimulatedStripeAdapter(),
+    },
   });
 }
 
