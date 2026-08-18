@@ -7,6 +7,10 @@ import express, {
 } from "express";
 import { authRouter } from "./routes/auth";
 import {
+  paymentErrorHandler,
+  paymentsRouter,
+} from "./routes/payments";
+import {
   requireAuth,
   type AuthenticatedRequest,
 } from "./middleware/authenticate";
@@ -39,6 +43,9 @@ app.get("/api", (_req: Request, res: Response) => {
 /** OAuth2/JWT authentication endpoints */
 app.use("/auth", authRouter);
 
+/** Payment service abstraction — createCustomer, chargeOrder, refund */
+app.use("/payments", paymentsRouter);
+
 /**
  * Example protected route — JWT validated on every request via requireAuth.
  * Downstream APIs should mount the same middleware.
@@ -54,6 +61,8 @@ app.get(
     });
   },
 );
+
+app.use(paymentErrorHandler);
 
 app.use(
   (
