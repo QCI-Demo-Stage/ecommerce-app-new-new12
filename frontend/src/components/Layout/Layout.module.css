@@ -1,0 +1,130 @@
+.layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  /* Respect iOS/Android safe-area insets (notch, home indicator) */
+  padding-top: var(--safe-area-top);
+  padding-right: var(--safe-area-right);
+  padding-bottom: var(--safe-area-bottom);
+  padding-left: var(--safe-area-left);
+  background: transparent;
+}
+
+.header {
+  flex: 0 0 auto;
+  width: 100%;
+  background: var(--color-surface-raised);
+  border-bottom: 1px solid var(--color-border-default);
+}
+
+.headerInner,
+.mainInner,
+.footerInner {
+  width: 100%;
+  max-width: var(--layout-content-max);
+  margin-inline: auto;
+  padding-inline: var(--layout-gutter-mobile);
+}
+
+.headerInner {
+  display: flex;
+  align-items: center;
+  min-height: 3.5rem;
+  padding-block: var(--space-2);
+}
+
+.main {
+  flex: 1 1 auto;
+  width: 100%;
+  padding-block: var(--layout-section-gap);
+}
+
+.mainInner {
+  display: grid;
+  grid-template-columns: repeat(var(--layout-columns), minmax(0, 1fr));
+  gap: var(--layout-grid-gap);
+  align-content: start;
+}
+
+/* Full-width children span the responsive grid */
+.mainInner > * {
+  grid-column: 1 / -1;
+}
+
+.aside {
+  display: none;
+}
+
+.footer {
+  flex: 0 0 auto;
+  width: 100%;
+  border-top: 1px solid var(--color-border-default);
+  background: var(--color-surface-muted);
+  padding-block: var(--space-4);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+/* Tablet: optional side rail when aside is present */
+@media (min-width: 768px) {
+  .layoutWithAside .mainInner {
+    grid-template-columns: repeat(var(--layout-columns), minmax(0, 1fr));
+  }
+
+  .layoutWithAside .content {
+    grid-column: 1 / span 5;
+  }
+
+  .layoutWithAside .aside {
+    display: block;
+    grid-column: 6 / span 3;
+  }
+}
+
+/* Desktop: wider content + aside split */
+@media (min-width: 1024px) {
+  .headerInner {
+    min-height: 4rem;
+  }
+
+  .layoutWithAside .content {
+    grid-column: 1 / span 8;
+  }
+
+  .layoutWithAside .aside {
+    grid-column: 9 / span 4;
+  }
+}
+
+.content {
+  min-width: 0;
+}
+
+.breakpointBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.breakpointBadge::after {
+  content: 'mobile';
+}
+
+@media (min-width: 768px) {
+  .breakpointBadge::after {
+    content: 'tablet';
+  }
+}
+
+@media (min-width: 1024px) {
+  .breakpointBadge::after {
+    content: 'desktop';
+  }
+}
