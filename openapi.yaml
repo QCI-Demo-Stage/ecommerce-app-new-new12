@@ -1,0 +1,488 @@
+openapi: 3.0.3
+info:
+  title: Ecommerce Payment Service API
+  description: |
+    Unified payment service abstraction for Ecommerce App New.
+    Exposes createCustomer, chargeOrder, and refund operations that delegate
+    to provider adapters (Stripe, PayPal). Only tokenized payment data is
+    accepted; raw card PANs and CVVs are never transmitted or stored.
+  version: 1.0.0
+  contact:
+    name: Ecommerce Platform Team
+  license:
+    name: Proprietary
+
+servers:
+  - url: http://localhost:3000
+    description: Local development
+  - url: /api/v1
+    description: Relative API base
+
+tags:
+  - name: Customers
+    description: Payment customer provisioning
+  - name: Charges
+    description: Order charge operations
+  - name: Refunds
+    description: Refund operations
+
+paths:
+  /payments/customers:
+    post:
+      tags: [Customers]
+      operationId: createCustomer
+      summary: Create a payment customer
+      description: |
+        Provisions a customer with the selected payment provider and persists
+        a tokenized payment method reference (never raw card data).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCustomerRequest"
+            examples:
+              stripeCustomer:
+                summary: Stripe customer with payment method token
+                value:
+                  email: customer@example.com
+                  name: Jane Doe
+                  provider: stripe
+                  paymentMethodToken: pm_tok_stripe_abc123
+      responses:
+        "201":
+          description: Customer created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateCustomerResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "502":
+          $ref: "#/components/responses/ProviderError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /payments/charges:
+    post:
+      tags: [Charges]
+      operationId: chargeOrder
+      summary: Charge an order
+      description: |
+        Charges a previously provisioned customer for an order amount using
+        the stored encrypted payment token. Amounts are expressed in the
+        smallest currency unit (e.g. cents).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChargeOrderRequest"
+            examples:
+              chargeUsd:
+                summary: Charge USD order
+                value:
+                  customerId: 550e8400-e29b-41d4-a716-446655440000
+                  orderId: 660e8400-e29b-41d4-a716-446655440001
+                  amountCents: 4999
+                  currency: USD
+                  idempotencyKey: charge-order-660e8400-001
+      responses:
+        "201":
+          description: Charge succeeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChargeOrderResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "402":
+          $ref: "#/components/responses/PaymentRequired"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "502":
+          $ref: "#/components/responses/ProviderError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /payments/refunds:
+    post:
+      tags: [Refunds]
+      operationId: refund
+      summary: Refund a charge
+      description: |
+        Issues a full or partial refund against a successful charge.
+        Partial refunds must not exceed the remaining refundable amount.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefundRequest"
+            examples:
+              fullRefund:
+                summary: Full refund
+                value:
+                  chargeId: ch_550e8400e29b41d4a716446655440000
+                  reason: requested_by_customer
+                  idempotencyKey: refund-ch_550e8400-001
+      responses:
+        "201":
+          description: Refund succeeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefundResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "502":
+          $ref: "#/components/responses/ProviderError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token issued by the authentication service
+
+  schemas:
+    PaymentProvider:
+      type: string
+      enum: [stripe, paypal]
+      description: Supported payment provider adapters
+
+    CurrencyCode:
+      type: string
+      pattern: "^[A-Z]{3}$"
+      minLength: 3
+      maxLength: 3
+      example: USD
+      description: ISO 4217 currency code
+
+    CreateCustomerRequest:
+      type: object
+      required: [email, provider, paymentMethodToken]
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          example: customer@example.com
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          example: Jane Doe
+        provider:
+          $ref: "#/components/schemas/PaymentProvider"
+        paymentMethodToken:
+          type: string
+          minLength: 8
+          maxLength: 256
+          description: |
+            Provider-issued payment method token (e.g. Stripe pm_ / PayPal
+            vault id). Raw PAN/CVV must never be sent.
+          example: pm_tok_stripe_abc123
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+          description: Optional opaque key/value metadata
+
+    CreateCustomerResponse:
+      type: object
+      required:
+        [customerId, provider, providerCustomerId, paymentTokenId, createdAt]
+      properties:
+        customerId:
+          type: string
+          format: uuid
+        provider:
+          $ref: "#/components/schemas/PaymentProvider"
+        providerCustomerId:
+          type: string
+          description: Provider-side customer identifier
+        paymentTokenId:
+          type: string
+          format: uuid
+          description: Internal id of the stored encrypted token row
+        createdAt:
+          type: string
+          format: date-time
+
+    ChargeOrderRequest:
+      type: object
+      required: [customerId, orderId, amountCents, currency]
+      additionalProperties: false
+      properties:
+        customerId:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+          format: uuid
+        amountCents:
+          type: integer
+          minimum: 1
+          description: Charge amount in smallest currency unit
+          example: 4999
+        currency:
+          $ref: "#/components/schemas/CurrencyCode"
+        idempotencyKey:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: Client-supplied idempotency key to prevent duplicate charges
+        description:
+          type: string
+          maxLength: 500
+
+    ChargeOrderResponse:
+      type: object
+      required:
+        [
+          chargeId,
+          customerId,
+          orderId,
+          amountCents,
+          currency,
+          status,
+          provider,
+          providerChargeId,
+          createdAt,
+        ]
+      properties:
+        chargeId:
+          type: string
+          description: Internal charge identifier
+        customerId:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+          format: uuid
+        amountCents:
+          type: integer
+          minimum: 1
+        currency:
+          $ref: "#/components/schemas/CurrencyCode"
+        status:
+          type: string
+          enum: [succeeded, pending, failed]
+        provider:
+          $ref: "#/components/schemas/PaymentProvider"
+        providerChargeId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    RefundRequest:
+      type: object
+      required: [chargeId]
+      additionalProperties: false
+      properties:
+        chargeId:
+          type: string
+          minLength: 1
+          maxLength: 128
+        amountCents:
+          type: integer
+          minimum: 1
+          description: |
+            Optional partial refund amount. When omitted, the full remaining
+            refundable balance is refunded.
+        reason:
+          type: string
+          enum:
+            - requested_by_customer
+            - duplicate
+            - fraudulent
+            - order_change
+            - other
+        idempotencyKey:
+          type: string
+          minLength: 8
+          maxLength: 128
+
+    RefundResponse:
+      type: object
+      required:
+        [
+          refundId,
+          chargeId,
+          amountCents,
+          currency,
+          status,
+          provider,
+          providerRefundId,
+          createdAt,
+        ]
+      properties:
+        refundId:
+          type: string
+        chargeId:
+          type: string
+        amountCents:
+          type: integer
+          minimum: 1
+        currency:
+          $ref: "#/components/schemas/CurrencyCode"
+        status:
+          type: string
+          enum: [succeeded, pending, failed]
+        provider:
+          $ref: "#/components/schemas/PaymentProvider"
+        providerRefundId:
+          type: string
+        reason:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          description: Machine-readable error code
+          enum:
+            - validation_error
+            - unauthorized
+            - payment_required
+            - not_found
+            - conflict
+            - unprocessable_entity
+            - provider_error
+            - internal_error
+        message:
+          type: string
+          description: Human-readable error description
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              message:
+                type: string
+        providerCode:
+          type: string
+          description: Upstream provider error code when available
+          nullable: true
+
+  responses:
+    ValidationError:
+      description: Request failed validation
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: validation_error
+            message: Request body failed validation
+            details:
+              - path: email
+                message: Invalid email
+
+    Unauthorized:
+      description: Missing or invalid authentication
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: unauthorized
+            message: Authentication required
+
+    PaymentRequired:
+      description: Payment declined by the provider
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: payment_required
+            message: Card was declined
+            providerCode: card_declined
+
+    NotFound:
+      description: Referenced resource was not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: not_found
+            message: Customer not found
+
+    Conflict:
+      description: Resource conflict (duplicate or already refunded)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: conflict
+            message: Customer already exists for this email and provider
+
+    UnprocessableEntity:
+      description: Semantically invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: unprocessable_entity
+            message: Refund amount exceeds remaining refundable balance
+
+    ProviderError:
+      description: Upstream payment provider failure
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: provider_error
+            message: Payment provider unavailable
+            providerCode: upstream_timeout
+
+    InternalError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: internal_error
+            message: An unexpected error occurred
