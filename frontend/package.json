@@ -1,0 +1,58 @@
+{
+  "name": "@ecommerce/ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Shared React UI component library and responsive base layout for Ecommerce App New",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./styles": "./src/styles/global.css",
+    "./tokens.css": "./src/tokens/tokens.css"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint src",
+    "typecheck": "tsc -b --pretty false",
+    "preview": "vite preview",
+    "test": "jest --config jest.config.cjs",
+    "test:watch": "npm run test -- --watch",
+    "test:coverage": "npm run test -- --coverage",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build",
+    "test-storybook": "test-storybook"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.2"
+  },
+  "devDependencies": {
+    "@storybook/addon-a11y": "^10.5.9",
+    "@storybook/addon-docs": "^10.5.9",
+    "@storybook/react-vite": "^10.5.9",
+    "@storybook/test-runner": "^0.24.4",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.5",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@types/react-router-dom": "^5.3.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "identity-obj-proxy": "^3.0.0",
+    "jest": "^30.4.2",
+    "jest-environment-jsdom": "^30.4.1",
+    "oxlint": "^1.75.0",
+    "storybook": "^10.5.9",
+    "ts-jest": "^29.4.12",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
