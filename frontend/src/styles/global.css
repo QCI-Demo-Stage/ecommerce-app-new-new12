@@ -32,3 +32,23 @@ body {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
+
+/* Visually hidden until focused — WCAG 2.4.1 Bypass Blocks */
+.skip-link {
+  position: absolute;
+  left: var(--space-4);
+  top: var(--space-4);
+  z-index: 1000;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-neutral-0);
+  color: var(--color-brand-primary);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-neutral-200);
+  transform: translateY(-200%);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}

@@ -1,69 +1,54 @@
-# Ecommerce App New — Frontend UI Library
+# Ecommerce App New — Frontend
 
-Shared React + TypeScript component library and responsive base layout for the ecommerce SPA.
+React + TypeScript SPA for the ecommerce storefront, including the shared UI library and product catalog pages.
 
 ## What’s included
 
 | Area | Details |
 |------|---------|
 | **Design tokens** | Colors, spacing, typography, radii, grid columns/gutters, safe-area insets (`src/tokens`) |
-| **Breakpoints** | Mobile-first: mobile `0`, tablet `768px`, desktop `1024px` |
-| **Layout** | `Layout` shell with flex column + CSS grid content, safe-area padding |
-| **Components** | `Button`, `Input`, `Card`, `Navigation` — typed props, ARIA attributes, token-based CSS modules |
-| **Tests** | Jest + React Testing Library (render + a11y assertions) |
-| **Storybook** | Usage docs + Chromatic viewport stories for mobile / tablet / desktop visual regression |
+| **Components** | `Button`, `Input`, `Card`, `Navigation`, `Layout`, `LazyImage`, `ProductCard`, `CatalogGrid` |
+| **Pages** | `/products` catalog grid, `/products/:id` detail view |
+| **API** | Typed client for `GET /products` (pagination) and `GET /products/:id` |
+| **A11y** | WCAG 2.1 AA-oriented labels, landmarks, keyboard nav, skip link, live regions |
+| **Perf** | Route-level code splitting, IntersectionObserver image lazy-loading, Vite proxy |
 
 ## Quick start
 
 ```bash
+# Terminal 1 — API (serves GET /products)
+cd backend
+cp .env.example .env
+npm install
+npm run dev
+
+# Terminal 2 — SPA (proxies /products to the API)
 cd frontend
 npm install
 npm run dev
 ```
 
+Open the Vite URL (default `http://localhost:5173`). Catalog: `/products`. Detail: `/products/:id`.
+
+Optional: set `VITE_API_BASE_URL` to point at a remote API instead of the Vite proxy.
+
 ### Scripts
 
 | Command | Purpose |
 |---------|---------|
-| `npm run test` | Unit tests (Jest + RTL) |
+| `npm run test` | Unit / integration tests (Jest + RTL) |
 | `npm run storybook` | Component docs & breakpoint previews |
-| `npm run build-storybook` | Static Storybook build (visual regression input) |
 | `npm run typecheck` | TypeScript project references check |
 | `npm run build` | Production Vite build |
+| `npm run lint` | oxlint |
 
-## Library usage
+## Catalog & detail behavior
 
-```tsx
-import {
-  Button,
-  Card,
-  Input,
-  Layout,
-  Navigation,
-  breakpoints,
-} from '@ecommerce/ui';
-import '@ecommerce/ui/styles';
+- `CatalogGrid` calls `GET /products?page=&pageSize=` and maps each item to `ProductCard` (shared `Card`).
+- Product images load via `LazyImage` (`IntersectionObserver`) when near the viewport.
+- `ProductDetailPage` reads `:id` from React Router, fetches `GET /products/:id`, and renders image, description, price, and an accessible Add to cart button.
 
-export function Page() {
-  return (
-    <Layout
-      header={<Navigation brand="Ecommerce App New" items={[{ id: 'home', label: 'Home', href: '/', current: true }]} />}
-    >
-      <Card title="Hello">
-        <Input label="Search" />
-        <Button>Go</Button>
-      </Card>
-    </Layout>
-  );
-}
-```
+## Story IDs
 
-## Breakpoints & safe areas
-
-- Tokens live in `src/tokens/breakpoints.ts` and `src/tokens/tokens.css`.
-- `Layout` applies `env(safe-area-inset-*)` so notched devices keep content clear of system UI.
-- Storybook stories under `Layout/BaseLayout` (`MobileBreakpoint`, `TabletBreakpoint`, `DesktopBreakpoint`) are tagged for Chromatic viewports `375`, `768`, and `1280`.
-
-## Story ID
-
-Implements story **Create reusable UI component library and base layout** (`d0da3e7b-35ae-4365-8ba5-3a2b05e44a74`).
+- **Create reusable UI component library and base layout** (`d0da3e7b-35ae-4365-8ba5-3a2b05e44a74`)
+- **Implement product catalog grid and detail pages** (`ce8d361c-dded-4b17-9811-d64626f7eb03`)

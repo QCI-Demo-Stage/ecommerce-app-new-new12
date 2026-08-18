@@ -19,6 +19,10 @@ module.exports = {
   testMatch: ['**/__tests__/**/*.[jt]s?(x)', '**/?(*.)+(spec|test).[jt]s?(x)'],
   collectCoverageFrom: [
     'src/components/**/*.{ts,tsx}',
+    'src/pages/**/*.{ts,tsx}',
+    'src/api/**/*.{ts,tsx}',
+    'src/hooks/**/*.{ts,tsx}',
+    'src/utils/**/*.{ts,tsx}',
     '!src/components/**/index.ts',
     '!src/**/*.stories.tsx',
   ],

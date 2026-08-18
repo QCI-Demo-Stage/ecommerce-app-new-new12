@@ -1,8 +1,16 @@
-import type { Preview } from '@storybook/react-vite';
+import type { Decorator, Preview } from '@storybook/react-vite';
+import { MemoryRouter } from 'react-router-dom';
 import { viewportPresets } from '../src/tokens';
 import '../src/styles/global.css';
 
+const withRouter: Decorator = (Story) => (
+  <MemoryRouter initialEntries={['/']}>
+    <Story />
+  </MemoryRouter>
+);
+
 const preview: Preview = {
+  decorators: [withRouter],
   parameters: {
     layout: 'fullscreen',
     controls: { matchers: { color: /(background|color)$/i, date: /Date$/i } },

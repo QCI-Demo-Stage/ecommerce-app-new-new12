@@ -1,4 +1,5 @@
 import { useId, useState, type HTMLAttributes } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import styles from './Navigation.module.css';
 
 export interface NavItem {
@@ -6,9 +7,9 @@ export interface NavItem {
   id: string;
   /** Visible label */
   label: string;
-  /** Destination href */
+  /** Destination path */
   href: string;
-  /** Marks the current page for aria-current */
+  /** Marks the current page for aria-current (optional; derived from location when omitted) */
   current?: boolean;
 }
 
@@ -25,6 +26,7 @@ export interface NavigationProps extends HTMLAttributes<HTMLElement> {
 
 /**
  * Responsive primary navigation with a mobile disclosure menu.
+ * Uses React Router Link for SPA navigation and keyboard-friendly focus.
  */
 export function Navigation({
   brand,
@@ -36,6 +38,7 @@ export function Navigation({
 }: NavigationProps) {
   const [open, setOpen] = useState(false);
   const menuId = useId();
+  const location = useLocation();
 
   return (
     <nav
@@ -45,9 +48,9 @@ export function Navigation({
     >
       <div className={styles.inner}>
         <div className={styles.brandRow}>
-          <a className={styles.brand} href={brandHref}>
+          <Link className={styles.brand} to={brandHref}>
             {brand}
-          </a>
+          </Link>
           <button
             type="button"
             className={styles.menuToggle}
@@ -64,22 +67,30 @@ export function Navigation({
             .filter(Boolean)
             .join(' ')}
         >
-          {items.map((item) => (
-            <li key={item.id}>
-              <a
-                className={[
-                  styles.link,
-                  item.current ? styles.linkActive : undefined,
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-                href={item.href}
-                aria-current={item.current ? 'page' : undefined}
-              >
-                {item.label}
-              </a>
-            </li>
-          ))}
+          {items.map((item) => {
+            const isCurrent =
+              item.current ??
+              (location.pathname === item.href ||
+                (item.href !== '/' && location.pathname.startsWith(item.href)));
+
+            return (
+              <li key={item.id}>
+                <Link
+                  className={[
+                    styles.link,
+                    isCurrent ? styles.linkActive : undefined,
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                  to={item.href}
+                  aria-current={isCurrent ? 'page' : undefined}
+                  onClick={() => setOpen(false)}
+                >
+                  {item.label}
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       </div>
     </nav>
