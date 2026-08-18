@@ -9,5 +9,7 @@ vendor/
 # Build / IDE
 dist/
 build/
+storybook-static/
+coverage/
 .idea/
 *.log
