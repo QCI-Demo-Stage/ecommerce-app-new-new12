@@ -1,0 +1,453 @@
+openapi: 3.0.3
+info:
+  title: Ecommerce Payment Service API
+  description: |
+    Unified payment abstraction exposing createCustomer, chargeOrder, and refund.
+    Card data never enters this API — clients supply provider payment method tokens
+    only. Encrypted payment tokens at rest use simulated KMS envelope encryption
+    for PCI-DSS scoped storage.
+  version: 1.0.0
+  contact:
+    name: Ecommerce App New Platform
+  license:
+    name: Proprietary
+    url: https://example.com/license
+servers:
+  - url: /payments
+    description: Payment service base path
+tags:
+  - name: Customers
+    description: Payment-provider customer provisioning
+  - name: Charges
+    description: Order charge operations
+  - name: Refunds
+    description: Refund operations
+paths:
+  /customers:
+    post:
+      tags: [Customers]
+      operationId: createCustomer
+      summary: Create a payment customer
+      description: |
+        Creates a customer record with the configured payment provider (Stripe or
+        PayPal) and persists a local customer row. Does not accept raw PAN/CVV.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCustomerRequest'
+            examples:
+              stripeCustomer:
+                value:
+                  email: customer@example.com
+                  displayName: Ada Lovelace
+                  provider: stripe
+                  metadata:
+                    userId: 550e8400-e29b-41d4-a716-446655440000
+      responses:
+        '201':
+          description: Customer created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '502':
+          $ref: '#/components/responses/ProviderError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /charges:
+    post:
+      tags: [Charges]
+      operationId: chargeOrder
+      summary: Charge an order
+      description: |
+        Charges an order using a previously tokenized payment method. The request
+        supplies a paymentMethodToken from the provider SDK (never raw card data).
+        On success the service stores only a KMS-encrypted token ciphertext.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChargeOrderRequest'
+            examples:
+              charge:
+                value:
+                  customerId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  orderId: 9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d
+                  amountCents: 4999
+                  currency: USD
+                  paymentMethodToken: pm_tok_simulated_visa_4242
+                  provider: stripe
+                  idempotencyKey: charge-9b1deb4d-001
+      responses:
+        '201':
+          description: Charge succeeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChargeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '502':
+          $ref: '#/components/responses/ProviderError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /refunds:
+    post:
+      tags: [Refunds]
+      operationId: refund
+      summary: Refund a charge
+      description: |
+        Refunds all or part of a prior successful charge. Amount must not exceed
+        the remaining refundable balance on the charge.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefundRequest'
+            examples:
+              fullRefund:
+                value:
+                  chargeId: ch_simulated_abc123
+                  reason: requested_by_customer
+                  idempotencyKey: refund-ch_simulated_abc123-001
+              partialRefund:
+                value:
+                  chargeId: ch_simulated_abc123
+                  amountCents: 1000
+                  reason: duplicate
+                  idempotencyKey: refund-ch_simulated_abc123-partial-001
+      responses:
+        '201':
+          description: Refund created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefundResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '502':
+          $ref: '#/components/responses/ProviderError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token issued by the authentication service
+
+  schemas:
+    PaymentProvider:
+      type: string
+      enum: [stripe, paypal]
+      description: Supported payment provider adapters
+
+    CreateCustomerRequest:
+      type: object
+      required: [email, provider]
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        displayName:
+          type: string
+          maxLength: 255
+        provider:
+          $ref: '#/components/schemas/PaymentProvider'
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+          description: Opaque key/value pairs forwarded to the provider
+
+    CustomerResponse:
+      type: object
+      required:
+        - id
+        - email
+        - provider
+        - providerCustomerId
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+          nullable: true
+        provider:
+          $ref: '#/components/schemas/PaymentProvider'
+        providerCustomerId:
+          type: string
+          description: Customer id returned by the payment provider
+        createdAt:
+          type: string
+          format: date-time
+
+    ChargeOrderRequest:
+      type: object
+      required:
+        - customerId
+        - orderId
+        - amountCents
+        - currency
+        - paymentMethodToken
+        - provider
+      additionalProperties: false
+      properties:
+        customerId:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+          format: uuid
+        amountCents:
+          type: integer
+          minimum: 1
+          description: Charge amount in the smallest currency unit
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          pattern: '^[A-Z]{3}$'
+          example: USD
+        paymentMethodToken:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: Provider payment-method token (never raw PAN)
+        provider:
+          $ref: '#/components/schemas/PaymentProvider'
+        idempotencyKey:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: Client idempotency key to prevent duplicate charges
+
+    ChargeResponse:
+      type: object
+      required:
+        - chargeId
+        - customerId
+        - orderId
+        - amountCents
+        - currency
+        - status
+        - provider
+        - paymentTokenId
+        - createdAt
+      properties:
+        chargeId:
+          type: string
+          description: Provider charge / capture identifier
+        customerId:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+          format: uuid
+        amountCents:
+          type: integer
+        currency:
+          type: string
+        status:
+          type: string
+          enum: [succeeded, pending, failed]
+        provider:
+          $ref: '#/components/schemas/PaymentProvider'
+        paymentTokenId:
+          type: string
+          format: uuid
+          description: Local id of the stored encrypted payment token row
+        createdAt:
+          type: string
+          format: date-time
+
+    RefundRequest:
+      type: object
+      required: [chargeId]
+      additionalProperties: false
+      properties:
+        chargeId:
+          type: string
+          minLength: 1
+          maxLength: 255
+        amountCents:
+          type: integer
+          minimum: 1
+          description: Optional partial refund; omit for full remaining amount
+        reason:
+          type: string
+          enum:
+            - duplicate
+            - fraudulent
+            - requested_by_customer
+            - other
+        idempotencyKey:
+          type: string
+          minLength: 8
+          maxLength: 128
+        provider:
+          $ref: '#/components/schemas/PaymentProvider'
+
+    RefundResponse:
+      type: object
+      required:
+        - refundId
+        - chargeId
+        - amountCents
+        - currency
+        - status
+        - provider
+        - createdAt
+      properties:
+        refundId:
+          type: string
+        chargeId:
+          type: string
+        amountCents:
+          type: integer
+        currency:
+          type: string
+        status:
+          type: string
+          enum: [succeeded, pending, failed]
+        provider:
+          $ref: '#/components/schemas/PaymentProvider'
+        reason:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          description: Machine-readable error code
+          enum:
+            - validation_error
+            - unauthorized
+            - not_found
+            - conflict
+            - payment_declined
+            - provider_error
+            - internal_error
+        message:
+          type: string
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              message:
+                type: string
+
+  responses:
+    BadRequest:
+      description: Request failed validation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: validation_error
+            message: Request body failed validation
+    Unauthorized:
+      description: Missing or invalid bearer token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: unauthorized
+            message: Missing or invalid Authorization header
+    NotFound:
+      description: Referenced resource was not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: not_found
+            message: Customer not found
+    Conflict:
+      description: Idempotent replay or unique constraint conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: conflict
+            message: Duplicate idempotency key
+    PaymentRequired:
+      description: Provider declined the payment
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: payment_declined
+            message: The payment method was declined
+    ProviderError:
+      description: Upstream payment provider failure
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: provider_error
+            message: Payment provider unavailable
+    InternalError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: internal_error
+            message: An unexpected error occurred
