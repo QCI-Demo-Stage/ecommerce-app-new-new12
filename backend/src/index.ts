@@ -71,9 +71,11 @@ app.use(
   },
 );
 
-app.listen(port, () => {
-  // eslint-disable-next-line no-console
-  console.log(`Backend listening on port ${port}`);
-});
+if (require.main === module) {
+  app.listen(port, () => {
+    // eslint-disable-next-line no-console
+    console.log(`Backend listening on port ${port}`);
+  });
+}
 
 export default app;
