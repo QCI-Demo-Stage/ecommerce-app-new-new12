@@ -6,10 +6,9 @@ import express, {
   type Response,
 } from "express";
 import { authRouter } from "./routes/auth";
-import {
-  requireAuth,
-  type AuthenticatedRequest,
-} from "./middleware/authenticate";
+import { productsRouter } from "./routes/products";
+import { meRouter } from "./routes/me";
+import { ordersRouter } from "./routes/orders";
 
 const app = express();
 const port = Number(process.env.PORT ?? 3000);
@@ -39,21 +38,14 @@ app.get("/api", (_req: Request, res: Response) => {
 /** OAuth2/JWT authentication endpoints */
 app.use("/auth", authRouter);
 
-/**
- * Example protected route — JWT validated on every request via requireAuth.
- * Downstream APIs should mount the same middleware.
- */
-app.get(
-  "/api/me",
-  requireAuth,
-  (req: AuthenticatedRequest, res: Response) => {
-    res.status(200).json({
-      userId: req.auth?.sub,
-      email: req.auth?.email,
-      role: req.auth?.role,
-    });
-  },
-);
+/** Product catalog endpoints */
+app.use("/products", productsRouter);
+
+/** Authenticated account profile */
+app.use("/api/me", meRouter);
+
+/** Authenticated order history */
+app.use("/api/orders", ordersRouter);
 
 app.use(
   (
