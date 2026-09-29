@@ -1,0 +1,65 @@
+.layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  /* Respect notched / home-indicator safe areas on mobile */
+  padding-top: var(--safe-area-top);
+  padding-right: var(--safe-area-right);
+  padding-bottom: var(--safe-area-bottom);
+  padding-left: var(--safe-area-left);
+}
+
+.header {
+  flex-shrink: 0;
+  width: 100%;
+}
+
+.main {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: var(--layout-max-width);
+  margin-inline: auto;
+  padding-inline: var(--grid-gutter);
+  padding-block: var(--space-4);
+  display: grid;
+  grid-template-columns: repeat(var(--grid-columns), minmax(0, 1fr));
+  gap: var(--grid-gutter);
+  align-content: start;
+}
+
+.main > * {
+  grid-column: 1 / -1;
+}
+
+.footer {
+  flex-shrink: 0;
+  width: 100%;
+  max-width: var(--layout-max-width);
+  margin-inline: auto;
+  padding-inline: var(--grid-gutter);
+  padding-block: var(--space-4);
+}
+
+/* Tablet: denser vertical rhythm, keep full-bleed columns by default */
+@media (min-width: 768px) {
+  .main {
+    padding-block: var(--space-6);
+  }
+
+  .footer {
+    padding-block: var(--space-6);
+  }
+}
+
+/* Desktop: optional side margins feel larger; content can span selectively */
+@media (min-width: 1024px) {
+  .main {
+    padding-block: var(--space-8);
+  }
+
+  .footer {
+    padding-block: var(--space-8);
+  }
+}

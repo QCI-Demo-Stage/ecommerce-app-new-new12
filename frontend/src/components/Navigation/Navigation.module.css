@@ -1,0 +1,106 @@
+.nav {
+  width: 100%;
+  background-color: var(--color-neutral-0);
+  border-bottom: 1px solid var(--color-neutral-200);
+}
+
+.inner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: var(--layout-max-width);
+  margin-inline: auto;
+  padding: var(--space-3) var(--grid-gutter);
+}
+
+.brandRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.brand {
+  font-family: var(--font-display);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+  text-decoration: none;
+  letter-spacing: -0.02em;
+}
+
+.menuToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  padding: var(--space-2);
+  border: 1px solid var(--color-neutral-200);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-0);
+  color: var(--color-neutral-700);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.menuToggle:hover {
+  background: var(--color-neutral-50);
+}
+
+.list {
+  display: none;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.listOpen {
+  display: flex;
+}
+
+.link {
+  display: block;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--color-neutral-700);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+  text-decoration: none;
+}
+
+.link:hover {
+  background-color: var(--color-neutral-50);
+  color: var(--color-brand-primary);
+}
+
+.linkActive {
+  background-color: rgba(11, 95, 74, 0.08);
+  color: var(--color-brand-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+@media (min-width: 768px) {
+  .inner {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding-block: var(--space-4);
+  }
+
+  .menuToggle {
+    display: none;
+  }
+
+  .list {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-1);
+  }
+}
