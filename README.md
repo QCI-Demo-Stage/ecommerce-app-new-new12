@@ -20,7 +20,7 @@ npm run dev
 
 See [frontend/README.md](./frontend/README.md) for tokens, routing, and a11y notes.
 
-Public cart UI lives at `/cart` (editable quantities, remove confirmation, live totals). Protected routes (`/checkout`, `/account`, `/account/orders`) require a JWT access token (session storage). Unauthenticated visitors see an accessible sign-in fallback.
+Public cart UI lives at `/cart` (editable quantities, remove confirmation, live totals). Cart state is managed by a global `CartProvider` (localStorage-backed) with `useCart` / `useCartActions`. Protected routes (`/checkout`, `/account`, `/account/orders`) require a JWT access token (session storage). Unauthenticated visitors see an accessible sign-in fallback.
 
 ## Backend
 
@@ -48,4 +48,4 @@ Auth flow diagram: [docs/auth_flow.png](./docs/auth_flow.png).
 
 ## Story
 
-Implements **Build Cart UI and editable line-item list** (`bd02236d-d894-4cab-a4a9-989d8b46f469`), building on the checkout wizard and protected account screens.
+Implements **Implement global Cart context and state management** (`e2fe8941-ba52-43eb-854c-1b1eb025a19a`), building on the Cart UI, checkout wizard, and protected account screens.

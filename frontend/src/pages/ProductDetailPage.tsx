@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Button } from '../components/Button';
 import { LazyImage } from '../components/LazyImage';
+import { useCartActions } from '../cart';
 import { useProductDetail } from '../hooks/useProductDetail';
 import { formatPrice } from '../utils/formatPrice';
 import styles from './ProductDetailPage.module.css';
@@ -13,6 +14,7 @@ import styles from './ProductDetailPage.module.css';
 export function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { product, loading, error, notFound, reload } = useProductDetail(id);
+  const { addItem } = useCartActions();
   const [cartMessage, setCartMessage] = useState<string | null>(null);
   const headingId = useId();
   const descriptionId = useId();
@@ -56,7 +58,15 @@ export function ProductDetailPage() {
   const imageAlt = `Product photo of ${product.name}`;
 
   const handleAddToCart = () => {
-    // Cart store arrives in a later story; announce intent for screen readers now.
+    addItem({
+      productId: product.id,
+      name: product.name,
+      sku: product.sku,
+      priceCents: product.priceCents,
+      currency: product.currency,
+      imageUrl: product.imageUrl,
+      quantity: 1,
+    });
     setCartMessage(`${product.name} added to cart`);
   };
 

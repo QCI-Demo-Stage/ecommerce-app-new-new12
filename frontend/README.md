@@ -8,7 +8,7 @@ React + TypeScript SPA for the ecommerce storefront, including the shared UI lib
 |------|---------|
 | **Design tokens** | Colors, spacing, typography, radii, grid columns/gutters, safe-area insets (`src/tokens`) |
 | **Components** | `Button`, `Input`, `Card`, `Navigation`, `Layout`, `LazyImage`, `ProductCard`, `CatalogGrid`, `ConfirmDialog`, `AccountNav`, `UnauthenticatedFallback`, `ApiErrorState` |
-| **Cart** | `CartProvider` with `useCart` / `useCartActions`; Cart page with editable quantities and remove confirmation |
+| **Cart** | Global `CartProvider` (localStorage-backed) with `useCart` / `useCartActions`; Cart page with editable quantities and remove confirmation |
 | **Pages** | `/products` catalog, `/products/:id` detail, `/cart`, `/checkout` wizard, `/account` profile, `/account/orders` history |
 | **Checkout** | `CheckoutWizard` — Shipping → Payment → Review → Confirmation with React Hook Form validation and `POST /api/orders` |
 | **Auth** | `PrivateRoute` JWT gate, sessionStorage token helpers, sign-in fallback |
@@ -35,7 +35,7 @@ Open the Vite URL (default `http://localhost:5173`).
 
 - Catalog: `/products`
 - Cart: `/cart`
-- Checkout: `/checkout` (requires JWT; demo line item until checkout is wired to live cart lines)
+- Checkout: `/checkout` (requires JWT; uses live cart lines from `CartProvider`)
 - Account profile: `/account` (requires JWT)
 - Order history: `/account/orders` (requires JWT)
 
@@ -51,6 +51,14 @@ Optional: set `VITE_API_BASE_URL` to point at a remote API instead of the Vite p
 | `npm run build` | Production Vite build |
 | `npm run lint` | oxlint |
 
+## Cart context
+
+- `CartProvider` wraps the app and hydrates from `localStorage` key `ecom_cart_v1`
+- `useCart()` exposes read-only `{ items, totals }` (item count + subtotal cents)
+- `useCartActions()` exposes `addItem`, `removeItem`, `updateQuantity`, `clearCart`
+- Invalid / corrupt storage payloads fall back to an empty cart; quantities are clamped to 1–99
+- Product detail **Add to cart** writes through the context; checkout clears the cart after a successful order
+
 ## Cart page
 
 - Consumes `useCart` / `useCartActions` for line items and live totals
@@ -64,7 +72,7 @@ Optional: set `VITE_API_BASE_URL` to point at a remote API instead of the Vite p
 - Client-side validation via React Hook Form (`onBlur` mode)
 - Card numbers are **tokenized in the browser**; only opaque tokens + last-4 are sent to `POST /api/orders`
 - Loading indicator on place-order; soft 2s client budget (`CHECKOUT_PERF_BUDGET_MS`)
-- Wizard accepts `items` as props so live cart wiring can land without redesign
+- `CheckoutPage` maps live cart lines via `toCheckoutItems` and clears the cart on success
 
 ## Account screens
 
@@ -81,3 +89,4 @@ Optional: set `VITE_API_BASE_URL` to point at a remote API instead of the Vite p
 - **Develop protected User Account screens (Profile & Order History)** (`961d3ee3-b174-4f20-8688-17dddc7dd799`)
 - **Create multi-step CheckoutWizard with validation** (`a7509da1-48b4-4292-8400-03827a5026a0`)
 - **Build Cart UI and editable line-item list** (`bd02236d-d894-4cab-a4a9-989d8b46f469`)
+- **Implement global Cart context and state management** (`e2fe8941-ba52-43eb-854c-1b1eb025a19a`)

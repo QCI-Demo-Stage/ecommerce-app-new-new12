@@ -32,6 +32,29 @@ export function buildCartState(items: CartItem[]): CartState {
   return { items, totals: computeTotals(items) };
 }
 
+/**
+ * Map cart lines to the checkout wizard item shape (omits imageUrl).
+ */
+export function toCheckoutItems(
+  items: CartItem[],
+): Array<{
+  productId: string;
+  name: string;
+  sku: string;
+  priceCents: number;
+  currency: string;
+  quantity: number;
+}> {
+  return items.map((item) => ({
+    productId: item.productId,
+    name: item.name,
+    sku: item.sku,
+    priceCents: item.priceCents,
+    currency: item.currency,
+    quantity: item.quantity,
+  }));
+}
+
 function isCartItem(value: unknown): value is CartItem {
   if (!value || typeof value !== 'object') {
     return false;
