@@ -6,8 +6,8 @@ Mobile-first ecommerce platform: Express/JWT backend and React storefront.
 
 | Path | Description |
 |------|-------------|
-| [`backend/`](./backend) | REST API — auth, products, profile, and order history |
-| [`frontend/`](./frontend) | React SPA — UI library, catalog, and protected account screens |
+| [`backend/`](./backend) | REST API — auth, products, profile, orders (history + checkout) |
+| [`frontend/`](./frontend) | React SPA — UI library, catalog, checkout wizard, account screens |
 
 ## Frontend
 
@@ -20,7 +20,7 @@ npm run dev
 
 See [frontend/README.md](./frontend/README.md) for tokens, routing, and a11y notes.
 
-Protected account routes (`/account`, `/account/orders`) require a JWT access token (session storage). Unauthenticated visitors see an accessible sign-in fallback.
+Protected routes (`/checkout`, `/account`, `/account/orders`) require a JWT access token (session storage). Unauthenticated visitors see an accessible sign-in fallback.
 
 ## Backend
 
@@ -41,9 +41,11 @@ npm run dev
 | `GET` | `/api/me` | Bearer | Current user profile |
 | `PATCH` | `/api/me` | Bearer | Update profile |
 | `GET` | `/api/orders` | Bearer | Paginated order history |
+| `POST` | `/api/orders` | Bearer | Place order (tokenized payment only) |
+| `GET` | `/api/orders/:id` | Bearer | Order detail for owner |
 
 Auth flow diagram: [docs/auth_flow.png](./docs/auth_flow.png).
 
 ## Story
 
-Implements **Develop protected User Account screens (Profile & Order History)** (`961d3ee3-b174-4f20-8688-17dddc7dd799`).
+Implements **Create multi-step CheckoutWizard with validation** (`a7509da1-48b4-4292-8400-03827a5026a0`), building on protected account screens.
