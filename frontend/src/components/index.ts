@@ -23,3 +23,6 @@ export type { ProductCardProps } from './ProductCard';
 
 export { CatalogGrid } from './CatalogGrid';
 export type { CatalogGridProps } from './CatalogGrid';
+
+export { ConfirmDialog } from './ConfirmDialog';
+export type { ConfirmDialogProps } from './ConfirmDialog';
