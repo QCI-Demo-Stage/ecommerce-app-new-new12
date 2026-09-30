@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import styles from './Button.module.css';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -19,35 +19,41 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 /**
  * Accessible button styled with design tokens.
  */
-export function Button({
-  variant = 'primary',
-  size = 'md',
-  fullWidth = false,
-  type = 'button',
-  className,
-  disabled,
-  children,
-  ...rest
-}: ButtonProps) {
-  const classNames = [
-    styles.button,
-    styles[variant],
-    styles[size],
-    fullWidth ? styles.fullWidth : undefined,
-    className,
-  ]
-    .filter(Boolean)
-    .join(' ');
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  function Button(
+    {
+      variant = 'primary',
+      size = 'md',
+      fullWidth = false,
+      type = 'button',
+      className,
+      disabled,
+      children,
+      ...rest
+    },
+    ref,
+  ) {
+    const classNames = [
+      styles.button,
+      styles[variant],
+      styles[size],
+      fullWidth ? styles.fullWidth : undefined,
+      className,
+    ]
+      .filter(Boolean)
+      .join(' ');
 
-  return (
-    <button
-      type={type}
-      className={classNames}
-      disabled={disabled}
-      aria-disabled={disabled || undefined}
-      {...rest}
-    >
-      {children}
-    </button>
-  );
-}
+    return (
+      <button
+        ref={ref}
+        type={type}
+        className={classNames}
+        disabled={disabled}
+        aria-disabled={disabled || undefined}
+        {...rest}
+      >
+        {children}
+      </button>
+    );
+  },
+);

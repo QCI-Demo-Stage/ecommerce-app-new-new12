@@ -1,0 +1,42 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: rgba(26, 33, 30, 0.45);
+}
+
+.dialog {
+  width: min(100%, 24rem);
+  padding: var(--space-6);
+  background: var(--color-neutral-0);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-neutral-200);
+  box-shadow: 0 12px 40px rgba(26, 33, 30, 0.18);
+}
+
+.title {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-display);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+  color: var(--color-neutral-900);
+}
+
+.description {
+  margin: 0 0 var(--space-6);
+  color: var(--color-neutral-700);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height-relaxed);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: flex-end;
+}

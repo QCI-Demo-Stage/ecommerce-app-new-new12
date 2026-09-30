@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Navigation } from './components/Navigation';
 import { PrivateRoute } from './auth/PrivateRoute';
+import { CartProvider } from './cart';
 
 const CatalogPage = lazy(() =>
   import('./pages/CatalogPage').then((m) => ({ default: m.CatalogPage })),
@@ -11,6 +12,9 @@ const ProductDetailPage = lazy(() =>
   import('./pages/ProductDetailPage').then((m) => ({
     default: m.ProductDetailPage,
   })),
+);
+const CartPage = lazy(() =>
+  import('./pages/CartPage').then((m) => ({ default: m.CartPage })),
 );
 const CheckoutPage = lazy(() =>
   import('./pages/CheckoutPage').then((m) => ({ default: m.CheckoutPage })),
@@ -35,7 +39,7 @@ const navItems = [
 
 export default function App() {
   return (
-    <>
+    <CartProvider>
       <a className="skip-link" href="#main-content">
         Skip to main content
       </a>
@@ -60,6 +64,7 @@ export default function App() {
             <Route path="/" element={<Navigate to="/products" replace />} />
             <Route path="/products" element={<CatalogPage />} />
             <Route path="/products/:id" element={<ProductDetailPage />} />
+            <Route path="/cart" element={<CartPage />} />
             <Route
               path="/checkout"
               element={
@@ -88,6 +93,6 @@ export default function App() {
           </Routes>
         </Suspense>
       </Layout>
-    </>
+    </CartProvider>
   );
 }

@@ -7,7 +7,7 @@ Mobile-first ecommerce platform: Express/JWT backend and React storefront.
 | Path | Description |
 |------|-------------|
 | [`backend/`](./backend) | REST API — auth, products, profile, orders (history + checkout) |
-| [`frontend/`](./frontend) | React SPA — UI library, catalog, checkout wizard, account screens |
+| [`frontend/`](./frontend) | React SPA — UI library, catalog, cart, checkout wizard, account screens |
 
 ## Frontend
 
@@ -20,7 +20,7 @@ npm run dev
 
 See [frontend/README.md](./frontend/README.md) for tokens, routing, and a11y notes.
 
-Protected routes (`/checkout`, `/account`, `/account/orders`) require a JWT access token (session storage). Unauthenticated visitors see an accessible sign-in fallback.
+Public cart UI lives at `/cart` (editable quantities, remove confirmation, live totals). Protected routes (`/checkout`, `/account`, `/account/orders`) require a JWT access token (session storage). Unauthenticated visitors see an accessible sign-in fallback.
 
 ## Backend
 
@@ -48,4 +48,4 @@ Auth flow diagram: [docs/auth_flow.png](./docs/auth_flow.png).
 
 ## Story
 
-Implements **Create multi-step CheckoutWizard with validation** (`a7509da1-48b4-4292-8400-03827a5026a0`), building on protected account screens.
+Implements **Build Cart UI and editable line-item list** (`bd02236d-d894-4cab-a4a9-989d8b46f469`), building on the checkout wizard and protected account screens.
