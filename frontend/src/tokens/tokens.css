@@ -1,0 +1,91 @@
+/**
+ * Design token CSS custom properties (mobile-first).
+ * Import once at the application / Storybook root.
+ */
+:root {
+  /* Colors */
+  --color-brand-primary: #0b5f4a;
+  --color-brand-primary-hover: #084c3b;
+  --color-brand-primary-active: #063c2f;
+  --color-brand-accent: #c45c26;
+  --color-brand-accent-hover: #a34b1e;
+
+  --color-neutral-0: #ffffff;
+  --color-neutral-50: #f6f7f6;
+  --color-neutral-100: #e8ebe9;
+  --color-neutral-200: #cfd6d2;
+  --color-neutral-300: #a8b3ad;
+  --color-neutral-500: #6b766f;
+  --color-neutral-700: #3d4641;
+  --color-neutral-900: #1a211e;
+
+  --color-danger: #b42318;
+  --color-danger-bg: #fef3f2;
+  --color-success: #027a48;
+  --color-focus: #2e90fa;
+
+  /* Spacing */
+  --space-0: 0;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  /* Typography */
+  --font-sans: "Source Sans 3", "Segoe UI", sans-serif;
+  --font-display: "Fraunces", Georgia, serif;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-3xl: 1.875rem;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.65;
+
+  /* Radii */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+
+  /* Grid */
+  --grid-columns: 4;
+  --grid-gutter: var(--space-4);
+  --layout-max-width: 72rem;
+
+  /* Safe area insets (notched devices) */
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+
+  /* Breakpoint reference values (for JS consumers; CSS uses media queries) */
+  --bp-tablet: 768px;
+  --bp-desktop: 1024px;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --grid-columns: 8;
+    --grid-gutter: var(--space-5);
+  }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --grid-columns: 12;
+    --grid-gutter: var(--space-6);
+  }
+}

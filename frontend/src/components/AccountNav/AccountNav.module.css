@@ -1,0 +1,31 @@
+.nav {
+  margin-bottom: var(--space-6);
+  border-bottom: 1px solid var(--color-neutral-200);
+}
+
+.list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.link {
+  display: inline-block;
+  padding: var(--space-2) 0;
+  color: var(--color-neutral-700);
+  text-decoration: none;
+  font-weight: var(--font-weight-medium);
+  border-bottom: 2px solid transparent;
+}
+
+.link:hover {
+  color: var(--color-brand-primary);
+}
+
+.linkActive {
+  color: var(--color-brand-primary);
+  border-bottom-color: var(--color-brand-primary);
+}

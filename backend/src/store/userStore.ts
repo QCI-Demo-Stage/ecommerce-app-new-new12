@@ -94,6 +94,39 @@ export class UserStore {
     user.lastLoginAt = new Date();
     user.updatedAt = new Date();
   }
+
+  /**
+   * Updates mutable profile fields. Email changes re-index the email map.
+   */
+  async updateProfile(
+    userId: string,
+    input: { firstName: string; lastName: string; email?: string },
+  ): Promise<UserRecord> {
+    const user = this.byId.get(userId);
+    if (!user) {
+      const err = new Error("USER_NOT_FOUND");
+      throw err;
+    }
+
+    if (input.email !== undefined) {
+      const normalizedEmail = input.email.toLowerCase();
+      const existingId = this.byEmail.get(normalizedEmail);
+      if (existingId && existingId !== userId) {
+        const err = new Error("EMAIL_TAKEN");
+        throw err;
+      }
+      if (normalizedEmail !== user.email) {
+        this.byEmail.delete(user.email);
+        this.byEmail.set(normalizedEmail, userId);
+        user.email = normalizedEmail;
+      }
+    }
+
+    user.firstName = input.firstName;
+    user.lastName = input.lastName;
+    user.updatedAt = new Date();
+    return user;
+  }
 }
 
 export const userStore = new UserStore();

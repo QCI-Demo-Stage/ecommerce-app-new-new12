@@ -1,21 +1,28 @@
-# Ecommerce App New — User Authentication Service
+# Ecommerce App New
 
-Secure OAuth2/JWT authentication for the ecommerce backend.
+Mobile-first ecommerce platform: Express/JWT backend and React storefront.
 
-## Auth flow diagram
+## Packages
 
-See [docs/auth_flow.png](docs/auth_flow.png) for the registration, login, token issuance, and refresh sequence diagram.
+| Path | Description |
+|------|-------------|
+| [`backend/`](./backend) | REST API — auth, products, profile, and order history |
+| [`frontend/`](./frontend) | React SPA — UI library, catalog, and protected account screens |
 
-## Endpoints
+## Frontend
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `POST` | `/auth/register` | Public | Register with email/password (bcrypt-hashed) |
-| `POST` | `/auth/login` | Public | Login; returns access + refresh JWTs |
-| `POST` | `/auth/refresh` | Public | Exchange refresh token for a new token pair |
-| `GET` | `/api/me` | Bearer access token | Example protected route |
+```bash
+cd frontend
+npm install
+npm run test
+npm run dev
+```
 
-## Quick start
+See [frontend/README.md](./frontend/README.md) for tokens, routing, and a11y notes.
+
+Protected account routes (`/account`, `/account/orders`) require a JWT access token (session storage). Unauthenticated visitors see an accessible sign-in fallback.
+
+## Backend
 
 ```bash
 cd backend
@@ -24,4 +31,19 @@ npm install
 npm run dev
 ```
 
-Set `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` to long random values (≥32 characters) before any non-local use.
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/products` | Public | Paginated catalog |
+| `GET` | `/products/:id` | Public | Product detail |
+| `POST` | `/auth/register` | Public | Register |
+| `POST` | `/auth/login` | Public | Login (JWT pair) |
+| `POST` | `/auth/refresh` | Public | Refresh tokens |
+| `GET` | `/api/me` | Bearer | Current user profile |
+| `PATCH` | `/api/me` | Bearer | Update profile |
+| `GET` | `/api/orders` | Bearer | Paginated order history |
+
+Auth flow diagram: [docs/auth_flow.png](./docs/auth_flow.png).
+
+## Story
+
+Implements **Develop protected User Account screens (Profile & Order History)** (`961d3ee3-b174-4f20-8688-17dddc7dd799`).
