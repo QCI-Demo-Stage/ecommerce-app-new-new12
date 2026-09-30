@@ -12,6 +12,9 @@ const ProductDetailPage = lazy(() =>
     default: m.ProductDetailPage,
   })),
 );
+const CheckoutPage = lazy(() =>
+  import('./pages/CheckoutPage').then((m) => ({ default: m.CheckoutPage })),
+);
 const ProfilePage = lazy(() =>
   import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage })),
 );
@@ -57,6 +60,14 @@ export default function App() {
             <Route path="/" element={<Navigate to="/products" replace />} />
             <Route path="/products" element={<CatalogPage />} />
             <Route path="/products/:id" element={<ProductDetailPage />} />
+            <Route
+              path="/checkout"
+              element={
+                <PrivateRoute>
+                  <CheckoutPage />
+                </PrivateRoute>
+              }
+            />
             <Route
               path="/account"
               element={
