@@ -3,6 +3,11 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ProductDetailPage } from './ProductDetailPage';
 import type { Product } from '../api/products';
+import {
+  CART_STORAGE_KEY,
+  CartProvider,
+  createEmptyCart,
+} from '../cart';
 
 const mockProduct: Product = {
   id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
@@ -20,12 +25,14 @@ const mockProduct: Product = {
 
 function renderDetail(id = mockProduct.id) {
   return render(
-    <MemoryRouter initialEntries={[`/products/${id}`]}>
-      <Routes>
-        <Route path="/products/:id" element={<ProductDetailPage />} />
-        <Route path="/products" element={<div>Catalog</div>} />
-      </Routes>
-    </MemoryRouter>,
+    <CartProvider persist initialState={createEmptyCart()}>
+      <MemoryRouter initialEntries={[`/products/${id}`]}>
+        <Routes>
+          <Route path="/products/:id" element={<ProductDetailPage />} />
+          <Route path="/products" element={<div>Catalog</div>} />
+        </Routes>
+      </MemoryRouter>
+    </CartProvider>,
   );
 }
 
@@ -33,6 +40,7 @@ describe('ProductDetailPage', () => {
   const originalFetch = global.fetch;
 
   beforeEach(() => {
+    window.localStorage.clear();
     class MockIntersectionObserver {
       readonly root = null;
       readonly rootMargin = '';
@@ -92,7 +100,7 @@ describe('ProductDetailPage', () => {
     expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toBeInTheDocument();
   });
 
-  it('announces add-to-cart for screen readers', async () => {
+  it('adds the product to Cart context and announces for screen readers', async () => {
     const user = userEvent.setup();
     renderDetail();
 
@@ -104,6 +112,14 @@ describe('ProductDetailPage', () => {
     expect(screen.getByRole('status')).toHaveTextContent(
       /classic widget added to cart/i,
     );
+
+    const raw = window.localStorage.getItem(CART_STORAGE_KEY);
+    expect(raw).toBeTruthy();
+    const parsed = JSON.parse(raw as string) as {
+      items: Array<{ productId: string; quantity: number }>;
+    };
+    expect(parsed.items[0].productId).toBe(mockProduct.id);
+    expect(parsed.items[0].quantity).toBe(1);
   });
 
   it('shows not found when the API returns 404', async () => {

@@ -1,45 +1,53 @@
-import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useCart, useCartActions, toCheckoutItems } from '../cart';
 import { CheckoutWizard } from '../checkout/CheckoutWizard';
 import type { CheckoutItem } from '../checkout/types';
 import styles from './CheckoutPage.module.css';
 
-/**
- * Provisional checkout items until the Cart context task lands.
- * Allows manual verification of the wizard + POST /api/orders flow.
- * Replace by wiring CartProvider / cart line items in a later step.
- */
-const DEMO_CHECKOUT_ITEMS: CheckoutItem[] = [
-  {
-    productId: 'prod-classic-widget',
-    name: 'Classic Widget',
-    sku: 'WDG-001',
-    priceCents: 2500,
-    currency: 'USD',
-    quantity: 1,
-  },
-];
-
 export interface CheckoutPageProps {
-  /** Optional items override (tests / future cart integration). */
+  /** Optional items override (tests). When omitted, live cart lines are used. */
   items?: CheckoutItem[];
   currency?: string;
 }
 
 /**
  * Checkout page hosting the multi-step CheckoutWizard.
+ * Reads line items from Cart context and clears the cart after a successful order.
  */
 export function CheckoutPage({
   items: itemsProp,
-  currency = 'USD',
+  currency,
 }: CheckoutPageProps) {
-  const [items, setItems] = useState<CheckoutItem[]>(
-    () => itemsProp ?? DEMO_CHECKOUT_ITEMS,
-  );
+  const { items: cartItems, totals } = useCart();
+  const { clearCart } = useCartActions();
 
-  const resolvedItems = useMemo(
-    () => itemsProp ?? items,
-    [itemsProp, items],
-  );
+  const resolvedItems: CheckoutItem[] =
+    itemsProp ?? toCheckoutItems(cartItems);
+
+  const resolvedCurrency =
+    currency ?? totals.currency ?? resolvedItems[0]?.currency ?? 'USD';
+
+  if (resolvedItems.length === 0) {
+    return (
+      <section className={styles.page} aria-labelledby="checkout-heading">
+        <header className={styles.header}>
+          <h1 id="checkout-heading" className={styles.title}>
+            Checkout
+          </h1>
+          <p className={styles.subtitle}>Your cart is empty.</p>
+        </header>
+        <p className={styles.emptyHint}>
+          Add items from the catalog before checking out.
+        </p>
+        <Link className={styles.catalogLink} to="/products">
+          Continue shopping
+        </Link>
+        <Link className={styles.cartLink} to="/cart">
+          View cart
+        </Link>
+      </section>
+    );
+  }
 
   return (
     <section className={styles.page} aria-labelledby="checkout-heading">
@@ -53,10 +61,10 @@ export function CheckoutPage({
       </header>
       <CheckoutWizard
         items={resolvedItems}
-        currency={currency}
+        currency={resolvedCurrency}
         onOrderPlaced={() => {
           if (itemsProp === undefined) {
-            setItems([]);
+            clearCart();
           }
         }}
       />

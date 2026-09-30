@@ -9,6 +9,10 @@ import {
   parseStoredCart,
   computeTotals,
   clampQuantity,
+  toCheckoutItems,
+  readCartFromStorage,
+  writeCartToStorage,
+  buildCartState,
 } from './index';
 import type { AddToCartInput } from './types';
 
@@ -73,6 +77,60 @@ describe('cartUtils', () => {
       0,
     );
   });
+
+  it('merges duplicate product lines when hydrating storage', () => {
+    const state = parseStoredCart(
+      JSON.stringify({
+        items: [
+          { ...sampleItem, quantity: 2 },
+          { ...sampleItem, quantity: 3 },
+        ],
+      }),
+    );
+    expect(state.items).toHaveLength(1);
+    expect(state.items[0].quantity).toBe(5);
+  });
+
+  it('skips invalid line entries while keeping valid ones', () => {
+    const state = parseStoredCart(
+      JSON.stringify({
+        items: [
+          { bad: true },
+          { ...sampleItem, quantity: 1 },
+          { ...sampleItem, productId: '   ', quantity: 2 },
+        ],
+      }),
+    );
+    expect(state.items).toHaveLength(1);
+    expect(state.items[0].productId).toBe('prod-1');
+  });
+
+  it('maps cart lines to checkout items without imageUrl', () => {
+    const mapped = toCheckoutItems([{ ...sampleItem, quantity: 2 }]);
+    expect(mapped).toEqual([
+      {
+        productId: 'prod-1',
+        name: 'Classic Widget',
+        sku: 'WDG-001',
+        priceCents: 2499,
+        currency: 'USD',
+        quantity: 2,
+      },
+    ]);
+    expect(mapped[0]).not.toHaveProperty('imageUrl');
+  });
+
+  it('reads and writes cart state through storage helpers', () => {
+    const storage = window.localStorage;
+    storage.clear();
+    writeCartToStorage(
+      buildCartState([{ ...sampleItem, quantity: 3 }]),
+      storage,
+    );
+    const restored = readCartFromStorage(storage);
+    expect(restored.items[0].quantity).toBe(3);
+    expect(restored.totals.subtotalCents).toBe(3 * 2499);
+  });
 });
 
 describe('CartContext actions', () => {
@@ -109,6 +167,20 @@ describe('CartContext actions', () => {
     });
     expect(result.current.cart.items).toHaveLength(0);
     expect(result.current.cart.totals.itemCount).toBe(0);
+  });
+
+  it('ignores blank product ids on add and remove', () => {
+    const { result } = renderHook(
+      () => ({ cart: useCart(), actions: useCartActions() }),
+      { wrapper: createWrapper(false) },
+    );
+
+    act(() => {
+      result.current.actions.addItem({ ...sampleItem, productId: '   ' });
+      result.current.actions.addItem(sampleItem);
+      result.current.actions.removeItem('  ');
+    });
+    expect(result.current.cart.items).toHaveLength(1);
   });
 
   it('clears the cart and removes lines when quantity drops below 1', () => {
@@ -160,6 +232,14 @@ describe('CartContext actions', () => {
     };
     expect(parsed.items[0].productId).toBe('prod-1');
     expect(parsed.items[0].quantity).toBe(2);
+
+    act(() => {
+      result.current.actions.clearCart();
+    });
+    const cleared = JSON.parse(
+      window.localStorage.getItem(CART_STORAGE_KEY) as string,
+    ) as { items: unknown[] };
+    expect(cleared.items).toHaveLength(0);
   });
 
   it('hydrates from localStorage on mount', () => {

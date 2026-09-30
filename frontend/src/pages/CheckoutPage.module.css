@@ -24,6 +24,28 @@
   font-size: var(--font-size-lg);
 }
 
+.emptyHint {
+  margin: 0 0 var(--space-4);
+  color: var(--color-neutral-700);
+}
+
+.catalogLink,
+.cartLink {
+  display: inline-block;
+  margin-right: var(--space-4);
+  color: var(--color-brand-primary);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.catalogLink:hover,
+.cartLink:hover,
+.catalogLink:focus-visible,
+.cartLink:focus-visible {
+  color: var(--color-brand-primary-hover);
+}
+
 @media (min-width: 1024px) {
   .page {
     padding-top: var(--space-6);

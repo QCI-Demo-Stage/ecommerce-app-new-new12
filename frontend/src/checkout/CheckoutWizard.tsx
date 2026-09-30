@@ -26,17 +26,17 @@ import styles from './CheckoutWizard.module.css';
 export const CHECKOUT_PERF_BUDGET_MS = 2000;
 
 export interface CheckoutWizardProps {
-  /** Line items to check out. Cart context will supply these in a later task. */
+  /** Line items to check out (typically from Cart context via CheckoutPage). */
   items: CheckoutItem[];
   currency?: string;
-  /** Called after a successful order so a future cart can clear itself. */
+  /** Called after a successful order so the cart can clear itself. */
   onOrderPlaced?: (order: CreatedOrder) => void;
 }
 
 /**
  * Multi-step checkout wizard: Shipping → Payment → Review → Confirmation.
  * Places the order via POST /api/orders. Items are passed as props so the
- * wizard does not depend on cart state management (a separate story task).
+ * wizard stays decoupled from Cart context (wired by CheckoutPage).
  */
 export function CheckoutWizard({
   items,
